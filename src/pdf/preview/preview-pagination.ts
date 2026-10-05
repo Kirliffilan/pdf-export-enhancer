@@ -1,4 +1,5 @@
 import { A4_HEIGHT } from "../pagination";
+
 export function paginatePreview(doc: Document): number {
   const sourceSection = doc.querySelector(
     "#pdf-preview-source .markdown-preview-section",
@@ -24,10 +25,8 @@ export function paginatePreview(doc: Document): number {
       continue;
     }
     section.appendChild(node);
-    if (
-      currentPage.scrollHeight > currentPage.clientHeight &&
-      section.children.length > 1
-    ) {
+
+    if (!fitsPage(currentPage, section) && section.children.length > 1) {
       section.lastElementChild?.remove();
       currentPage = createPage(doc);
       pagesContainer.appendChild(currentPage);
@@ -50,6 +49,16 @@ export function paginatePreview(doc: Document): number {
   });
   return Math.max(1, pages.length);
 }
+
+function fitsPage(page: HTMLElement, section: HTMLElement): boolean {
+  const pageStyle = getComputedStyle(page);
+  const paddingTop = parseFloat(pageStyle.paddingTop) || 0;
+  const paddingBottom = parseFloat(pageStyle.paddingBottom) || 0;
+  const availableHeight = A4_HEIGHT - paddingTop - paddingBottom;
+  const contentHeight = section.scrollHeight;
+  return contentHeight <= availableHeight + 1;
+}
+
 function createPage(doc: Document): HTMLElement {
   const page = doc.createElement("div");
   page.className = "pdf-preview-page";

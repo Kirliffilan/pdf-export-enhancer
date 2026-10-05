@@ -776,7 +776,7 @@ function paginatePreview(doc) {
       continue;
     }
     section.appendChild(node);
-    if (currentPage.scrollHeight > currentPage.clientHeight && section.children.length > 1) {
+    if (!fitsPage(currentPage, section) && section.children.length > 1) {
       section.lastElementChild?.remove();
       currentPage = createPage(doc);
       pagesContainer.appendChild(currentPage);
@@ -798,6 +798,14 @@ function paginatePreview(doc) {
     );
   });
   return Math.max(1, pages.length);
+}
+function fitsPage(page, section) {
+  const pageStyle = getComputedStyle(page);
+  const paddingTop = parseFloat(pageStyle.paddingTop) || 0;
+  const paddingBottom = parseFloat(pageStyle.paddingBottom) || 0;
+  const availableHeight = A4_HEIGHT - paddingTop - paddingBottom;
+  const contentHeight = section.scrollHeight;
+  return contentHeight <= availableHeight + 1;
 }
 function createPage(doc) {
   const page = doc.createElement("div");
