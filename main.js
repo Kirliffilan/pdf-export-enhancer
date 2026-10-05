@@ -43,10 +43,13 @@ var PdfExportSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
+    const isRussian = (0, import_obsidian.getLanguage)() === "ru";
     containerEl.createEl("h2", {
-      text: "PDF Export Settings"
+      text: isRussian ? "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0430 PDF" : "PDF Export Settings"
     });
-    new import_obsidian.Setting(containerEl).setName("\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430").setDesc("\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF").addText((text) => {
+    new import_obsidian.Setting(containerEl).setName(isRussian ? "\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430" : "Text size").setDesc(
+      isRussian ? "\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF" : "Text size used when exporting to PDF"
+    ).addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.step = "0.5";
       text.inputEl.min = "1";
@@ -916,17 +919,21 @@ var PdfPreview = class {
     this.container.appendChild(this.header);
     this.container.appendChild(this.navigation);
     this.container.appendChild(this.viewport);
-    this.header.textContent = "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 PDF";
+    this.header.textContent = this.getPreviewTitle();
   }
   async refresh() {
     const view = this.app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView);
     if (!view) {
-      this.showError("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0443\u044E \u0437\u0430\u043C\u0435\u0442\u043A\u0443");
+      this.showError(
+        this.isRussian() ? "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0443\u044E \u0437\u0430\u043C\u0435\u0442\u043A\u0443" : "Could not get the current note"
+      );
       return;
     }
     const source = getMarkdownSource(view);
     if (!source) {
-      this.showError("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0442\u0435\u043A\u0441\u0442 \u0437\u0430\u043C\u0435\u0442\u043A\u0438");
+      this.showError(
+        this.isRussian() ? "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0442\u0435\u043A\u0441\u0442 \u0437\u0430\u043C\u0435\u0442\u043A\u0438" : "Could not get note content"
+      );
       return;
     }
     this.currentPage = 0;
@@ -936,7 +943,9 @@ var PdfPreview = class {
       source.sourcePath
     );
     if (!html) {
-      this.showError("\u041E\u0448\u0438\u0431\u043A\u0430 \u0440\u0435\u043D\u0434\u0435\u0440\u0430 Markdown");
+      this.showError(
+        this.isRussian() ? "\u041E\u0448\u0438\u0431\u043A\u0430 \u0440\u0435\u043D\u0434\u0435\u0440\u0430 Markdown" : "Markdown rendering error"
+      );
       return;
     }
     await this.createIframe(html);
@@ -952,7 +961,9 @@ var PdfPreview = class {
     this.iframe = iframe;
     const doc = iframe.contentDocument;
     if (!doc) {
-      this.showError("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0437\u0434\u0430\u0442\u044C preview");
+      this.showError(
+        this.isRussian() ? "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0437\u0434\u0430\u0442\u044C \u043F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440" : "Could not create preview"
+      );
       return;
     }
     writePreviewDocument(
@@ -969,9 +980,11 @@ var PdfPreview = class {
     this.showPage();
   }
   updateHeader() {
-    this.header.textContent = `\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 PDF \u2014 ${this.pageCount} ${this.pageWord(
-      this.pageCount
-    )}`;
+    this.header.textContent = this.getPreviewTitle();
+  }
+  getPreviewTitle() {
+    const pageWord = this.pageWord(this.pageCount);
+    return this.isRussian() ? `\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 PDF \u2014 ${this.pageCount} ${pageWord}` : `PDF Preview \u2014 ${this.pageCount} ${pageWord}`;
   }
   renderNavigation() {
     renderNavigation(
@@ -1053,7 +1066,7 @@ var PdfPreview = class {
   }
   showError(message) {
     this.iframe = null;
-    this.header.textContent = "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 PDF";
+    this.header.textContent = this.getPreviewTitle();
     this.navigation.empty();
     this.viewport.empty();
     const error = document.createElement("div");
@@ -1061,17 +1074,23 @@ var PdfPreview = class {
     error.textContent = message;
     this.viewport.appendChild(error);
   }
+  isRussian() {
+    return (0, import_obsidian5.getLanguage)() === "ru";
+  }
   escapeHtml(value) {
     return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
   pageWord(count) {
-    if (count % 10 === 1 && count % 100 !== 11) {
-      return "\u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430";
+    if (this.isRussian()) {
+      if (count % 10 === 1 && count % 100 !== 11) {
+        return "\u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430";
+      }
+      if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) {
+        return "\u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B";
+      }
+      return "\u0441\u0442\u0440\u0430\u043D\u0438\u0446";
     }
-    if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) {
-      return "\u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B";
-    }
-    return "\u0441\u0442\u0440\u0430\u043D\u0438\u0446";
+    return count === 1 ? "page" : "pages";
   }
   setHeight(height) {
     this.viewport.style.height = `${height}px`;
@@ -1114,8 +1133,14 @@ var PdfModal = class {
     }
     const modals = Array.from(document.querySelectorAll(".modal"));
     const modal = modals.find((element) => {
-      const text = element.textContent ?? "";
-      return text.includes("\u042D\u043A\u0441\u043F\u043E\u0440\u0442 \u0432 PDF") || text.includes("Export PDF");
+      const hasPageSize = Array.from(element.querySelectorAll("select")).some(
+        (select) => Array.from(select.options).some(
+          (option) => option.textContent?.trim().toLowerCase() === "a4"
+        )
+      );
+      const text = element.textContent?.toLowerCase() ?? "";
+      const hasExportText = text.includes("export to pdf") || text.includes("\u044D\u043A\u0441\u043F\u043E\u0440\u0442 \u0432 pdf");
+      return hasPageSize || hasExportText;
     });
     if (!modal) {
       return;
@@ -1157,9 +1182,12 @@ var PdfModal = class {
     });
   }
   createFontSetting(container) {
+    const isRussian = (0, import_obsidian6.getLanguage)() === "ru";
     const wrapper = document.createElement("div");
     wrapper.className = "pdf-export-font-size-setting";
-    new import_obsidian6.Setting(wrapper).setName("\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430").setDesc("\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF").addText((text) => {
+    new import_obsidian6.Setting(wrapper).setName(isRussian ? "\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430" : "Text size").setDesc(
+      isRussian ? "\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF" : "Text size used when exporting to PDF"
+    ).addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.step = "0.5";
       text.inputEl.min = "1";
@@ -1184,9 +1212,17 @@ var PdfModal = class {
   }
   forceA4(modal) {
     const settings = Array.from(modal.querySelectorAll(".setting-item"));
-    const pageSetting = settings.find(
-      (setting) => (setting.textContent ?? "").includes("\u0420\u0430\u0437\u043C\u0435\u0440 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B")
-    );
+    const pageSetting = settings.find((setting) => {
+      const select2 = setting.querySelector(
+        "select"
+      );
+      if (!select2) {
+        return false;
+      }
+      return Array.from(select2.options).some(
+        (option) => option.textContent?.trim().toLowerCase() === "a4"
+      );
+    });
     if (!pageSetting) {
       return;
     }
@@ -1199,7 +1235,11 @@ var PdfModal = class {
       );
       if (a4) {
         select.value = a4.value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+        select.dispatchEvent(
+          new Event("change", {
+            bubbles: true
+          })
+        );
       }
     }
     pageSetting.style.display = "none";
@@ -1207,7 +1247,7 @@ var PdfModal = class {
   hideScaleSetting(modal) {
     const settings = Array.from(modal.querySelectorAll(".setting-item"));
     const scaleSetting = settings.find(
-      (setting) => (setting.textContent ?? "").includes("\u041C\u0430\u0441\u0448\u0442\u0430\u0431\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435")
+      (setting) => setting.querySelector('input[type="range"]')
     );
     if (!scaleSetting) {
       return;

@@ -1,5 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
-
+import { App, PluginSettingTab, Setting, getLanguage } from "obsidian";
 import type { PdfExportSettings } from "./settings";
 
 export interface SettingsPlugin {
@@ -18,13 +17,18 @@ export class PdfExportSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
+    const isRussian = getLanguage() === "ru";
     containerEl.createEl("h2", {
-      text: "PDF Export Settings",
+      text: isRussian ? "Настройки экспорта PDF" : "PDF Export Settings",
     });
 
     new Setting(containerEl)
-      .setName("Размер шрифта")
-      .setDesc("Размер текста при экспорте в PDF")
+      .setName(isRussian ? "Размер шрифта" : "Text size")
+      .setDesc(
+        isRussian
+          ? "Размер текста при экспорте в PDF"
+          : "Text size used when exporting to PDF",
+      )
       .addText((text) => {
         text.inputEl.type = "number";
         text.inputEl.step = "0.5";
