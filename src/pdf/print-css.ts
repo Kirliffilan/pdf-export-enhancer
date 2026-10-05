@@ -1,4 +1,4 @@
-import { App, normalizePath, MarkdownView } from "obsidian";
+import { App, normalizePath } from "obsidian";
 interface AppearanceData {
   enabledCssSnippets?: string[];
 }
@@ -7,268 +7,18 @@ interface SnippetSource {
   css: string;
 }
 export async function getLoadedCss(app: App): Promise<string> {
-  const view = app.workspace.getActiveViewOfType(MarkdownView);
-  const markdownRoot = view?.containerEl.querySelector(
-    ".markdown-preview-view",
-  ) as HTMLElement | null;
-  if (!markdownRoot) {
-    return "";
-  }
-  const standard: string[] = [];
-  const print: string[] = [];
-  for (const sheet of Array.from(document.styleSheets)) {
-    if (isPluginStylesheet(sheet) || isSnippetStylesheet(sheet)) {
-      continue;
-    }
-    try {
-      const rules = sheet.cssRules;
-      if (!rules) {
-        continue;
-      }
-      const baseUrl = sheet.href || document.baseURI;
-      for (const rule of Array.from(rules)) {
-        collectRule(rule, standard, print, baseUrl, markdownRoot);
-      }
-    } catch {}
-  }
   const snippets = await getEnabledSnippets(app);
-  const snippetNormal: string[] = [];
-  const snippetPrint: string[] = [];
+  const result: string[] = [];
   for (const snippet of snippets) {
     const split = splitPrintCss(snippet.css);
     if (split.normal.trim()) {
-      collectCssText(
-        split.normal,
-        snippetNormal,
-        markdownRoot,
-        getSnippetBaseUrl(app, snippet.name),
-      );
+      result.push(split.normal);
     }
     if (split.print.trim()) {
-      collectCssText(
-        split.print,
-        snippetPrint,
-        markdownRoot,
-        getSnippetBaseUrl(app, snippet.name),
-      );
+      result.push(split.print);
     }
   }
-  return [
-    standard.join("\n"),
-    print.join("\n"),
-    snippetNormal.join("\n"),
-    snippetPrint.join("\n"),
-  ]
-    .filter((value) => value.trim())
-    .join("\n");
-}
-function collectRule(
-  rule: CSSRule,
-  standard: string[],
-  print: string[],
-  baseUrl: string,
-  markdownRoot: HTMLElement,
-) {
-  if (rule instanceof CSSImportRule) {
-    try {
-      const imported = rule.styleSheet;
-      if (!imported) {
-        return;
-      }
-      for (const nestedRule of Array.from(imported.cssRules)) {
-        collectRule(
-          nestedRule,
-          standard,
-          print,
-          imported.href || baseUrl,
-          markdownRoot,
-        );
-      }
-    } catch {}
-    return;
-  }
-  if (rule instanceof CSSMediaRule) {
-    const condition = rule.conditionText?.toLowerCase().trim() ?? "";
-    if (condition.includes("print")) {
-      for (const nestedRule of Array.from(rule.cssRules)) {
-        collectPrintRule(nestedRule, print, baseUrl, markdownRoot);
-      }
-      return;
-    }
-    const nested: string[] = [];
-    for (const nestedRule of Array.from(rule.cssRules)) {
-      collectRule(nestedRule, nested, [], baseUrl, markdownRoot);
-    }
-    if (nested.length) {
-      standard.push(`@media ${rule.conditionText} {\n${nested.join("\n")}\n}`);
-    }
-    return;
-  }
-  if (rule instanceof CSSSupportsRule) {
-    const nestedStandard: string[] = [];
-    const nestedPrint: string[] = [];
-    for (const nestedRule of Array.from(rule.cssRules)) {
-      collectRule(
-        nestedRule,
-        nestedStandard,
-        nestedPrint,
-        baseUrl,
-        markdownRoot,
-      );
-    }
-    if (nestedStandard.length) {
-      standard.push(
-        `@supports ${rule.conditionText} {\n${nestedStandard.join("\n")}\n}`,
-      );
-    }
-    if (nestedPrint.length) {
-      print.push(
-        `@supports ${rule.conditionText} {\n${nestedPrint.join("\n")}\n}`,
-      );
-    }
-    return;
-  }
-  if (rule instanceof CSSStyleRule) {
-    if (ruleMatchesMarkdown(rule.selectorText, markdownRoot)) {
-      standard.push(absolutizeUrls(rule.cssText, baseUrl));
-    }
-    return;
-  }
-  if (rule instanceof CSSFontFaceRule) {
-    standard.push(absolutizeUrls(rule.cssText, baseUrl));
-    return;
-  }
-  if (rule instanceof CSSKeyframesRule) {
-    standard.push(absolutizeUrls(rule.cssText, baseUrl));
-  }
-}
-function collectPrintRule(
-  rule: CSSRule,
-  result: string[],
-  baseUrl: string,
-  markdownRoot: HTMLElement,
-) {
-  if (rule instanceof CSSMediaRule) {
-    for (const nestedRule of Array.from(rule.cssRules)) {
-      collectPrintRule(nestedRule, result, baseUrl, markdownRoot);
-    }
-    return;
-  }
-  if (rule instanceof CSSSupportsRule) {
-    const nested: string[] = [];
-    for (const nestedRule of Array.from(rule.cssRules)) {
-      collectPrintRule(nestedRule, nested, baseUrl, markdownRoot);
-    }
-    if (nested.length) {
-      result.push(`@supports ${rule.conditionText} {\n${nested.join("\n")}\n}`);
-    }
-    return;
-  }
-  if (rule instanceof CSSStyleRule) {
-    if (ruleMatchesMarkdown(rule.selectorText, markdownRoot)) {
-      result.push(absolutizeUrls(rule.cssText, baseUrl));
-    }
-    return;
-  }
-  if (rule instanceof CSSFontFaceRule) {
-    result.push(absolutizeUrls(rule.cssText, baseUrl));
-  }
-}
-function collectCssText(
-  css: string,
-  result: string[],
-  markdownRoot: HTMLElement,
-  baseUrl: string,
-) {
-  const style = document.createElement("style");
-  style.textContent = css;
-  document.head.appendChild(style);
-  try {
-    for (const rule of Array.from(style.sheet?.cssRules ?? [])) {
-      if (rule instanceof CSSMediaRule) {
-        const nested: string[] = [];
-        for (const nestedRule of Array.from(rule.cssRules)) {
-          collectPrintRule(nestedRule, nested, baseUrl, markdownRoot);
-        }
-        if (nested.length) {
-          result.push(nested.join("\n"));
-        }
-        continue;
-      }
-      if (rule instanceof CSSStyleRule) {
-        if (ruleMatchesMarkdown(rule.selectorText, markdownRoot)) {
-          result.push(absolutizeUrls(rule.cssText, baseUrl));
-        }
-      }
-    }
-  } finally {
-    style.remove();
-  }
-}
-function ruleMatchesMarkdown(selector: string, root: HTMLElement): boolean {
-  if (selector.includes("::")) {
-    selector = selector.replace(/::[a-z-]+/gi, "");
-  }
-  const selectors = splitSelectors(selector);
-  for (const part of selectors) {
-    const value = part.trim();
-    if (!value) {
-      continue;
-    }
-    if (value === ":root") {
-      return true;
-    }
-    if (/^html\b/i.test(value) || /^body\b/i.test(value)) {
-      continue;
-    }
-    try {
-      if (root.matches(value) || root.querySelector(value)) {
-        return true;
-      }
-    } catch {}
-  }
-  return false;
-}
-function splitSelectors(selector: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let depth = 0;
-  let quote = "";
-  for (let i = 0; i < selector.length; i++) {
-    const char = selector[i];
-    if (quote) {
-      current += char;
-      if (char === quote && selector[i - 1] !== "\\") {
-        quote = "";
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      current += char;
-      continue;
-    }
-    if (char === "(" || char === "[") {
-      depth++;
-      current += char;
-      continue;
-    }
-    if (char === ")" || char === "]") {
-      depth--;
-      current += char;
-      continue;
-    }
-    if (char === "," && depth === 0) {
-      result.push(current);
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-  if (current.trim()) {
-    result.push(current);
-  }
-  return result;
+  return result.join("\n");
 }
 async function getEnabledSnippets(app: App): Promise<SnippetSource[]> {
   const appearancePath = normalizePath(
@@ -278,42 +28,33 @@ async function getEnabledSnippets(app: App): Promise<SnippetSource[]> {
   try {
     const text = await app.vault.adapter.read(appearancePath);
     appearance = JSON.parse(text) as AppearanceData;
-  } catch {
+  } catch (error) {
+    console.warn("PDF Export Preview: failed to read appearance.json", error);
     return [];
   }
   const enabled = appearance.enabledCssSnippets ?? [];
   const result: SnippetSource[] = [];
-  for (const name of enabled) {
-    const fileName = name.toLowerCase().endsWith(".css") ? name : `${name}.css`;
-    const path = normalizePath(`${app.vault.configDir}/snippets/${fileName}`);
+  for (const snippetName of enabled) {
+    const fileName = snippetName.toLowerCase().endsWith(".css")
+      ? snippetName
+      : `${snippetName}.css`;
+    const snippetPath = normalizePath(
+      `${app.vault.configDir}/snippets/${fileName}`,
+    );
     try {
-      const css = await app.vault.adapter.read(path);
+      const css = await app.vault.adapter.read(snippetPath);
       result.push({
         name: fileName,
         css,
       });
-    } catch {}
+    } catch (error) {
+      console.warn(
+        `PDF Export Preview: failed to read snippet "${snippetName}"`,
+        error,
+      );
+    }
   }
   return result;
-}
-function isPluginStylesheet(sheet: CSSStyleSheet): boolean {
-  const owner = sheet.ownerNode;
-  if (owner instanceof HTMLStyleElement) {
-    return owner.id === "pdf-export-plugin-styles";
-  }
-  return false;
-}
-function isSnippetStylesheet(sheet: CSSStyleSheet): boolean {
-  const owner = sheet.ownerNode;
-  if (owner instanceof HTMLLinkElement) {
-    return owner.href.toLowerCase().includes("/snippets/");
-  }
-  return false;
-}
-function getSnippetBaseUrl(app: App, fileName: string): string {
-  return `${document.baseURI}${normalizePath(
-    `${app.vault.configDir}/snippets/${fileName}`,
-  )}`;
 }
 function splitPrintCss(css: string): {
   normal: string;
@@ -389,24 +130,4 @@ function findMatchingBrace(text: string, openBrace: number): number {
     }
   }
   return -1;
-}
-function absolutizeUrls(css: string, baseUrl: string): string {
-  return css.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (full, _quote, value) => {
-    const url = String(value).trim();
-    if (
-      !url ||
-      url.startsWith("data:") ||
-      url.startsWith("blob:") ||
-      url.startsWith("#") ||
-      /^[a-z][a-z0-9+.-]*:/i.test(url)
-    ) {
-      return full;
-    }
-    try {
-      const absolute = new URL(url, baseUrl).href;
-      return `url("${absolute}")`;
-    } catch {
-      return full;
-    }
-  });
 }

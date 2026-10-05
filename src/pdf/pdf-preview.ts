@@ -121,6 +121,9 @@ export class PdfPreview {
   }
   private getPreviewCss(): string {
     return `
+* {
+	box-sizing: border-box;
+}
 html {
 	margin: 0;
 	padding: 0;
@@ -160,6 +163,7 @@ body {
 	margin: 0;
 	padding: 0;
 	overflow: visible;
+	font-size: ${this.settings.fontSize}px !important;
 }
 .pdf-preview-page .markdown-preview-sizer {
 	width: 100%;
@@ -170,6 +174,7 @@ body {
 	margin: 0;
 	padding: 0;
 	overflow: visible;
+	font-size: ${this.settings.fontSize}px !important;
 }
 .pdf-preview-page .markdown-preview-section {
 	width: 100%;
