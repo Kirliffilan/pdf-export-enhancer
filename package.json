@@ -1,7 +1,7 @@
 {
-  "name": "pdf-export-settings",
+  "name": "pdf-export-enhancer",
   "version": "1.0.0",
-  "description": "PDF export settings for Obsidian",
+  "description": "Enhance Obsidian PDF export",
   "main": "main.js",
   "scripts": {
     "dev": "esbuild src/main.ts --bundle --external:obsidian --format=cjs --loader:.css=text --outfile=main.js --watch",
