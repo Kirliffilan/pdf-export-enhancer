@@ -22,7 +22,7 @@ __export(main_exports, {
   default: () => PdfExportPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/settings/settings.ts
 var DEFAULT_SETTINGS = {
@@ -30,7 +30,7 @@ var DEFAULT_SETTINGS = {
 };
 
 // src/pdf/pdf-modal.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/settings/settings-tab.ts
 var import_obsidian = require("obsidian");
@@ -64,7 +64,7 @@ var PdfExportSettingTab = class extends import_obsidian.PluginSettingTab {
 };
 
 // src/pdf/pdf-preview.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/pdf/pdf-source.ts
 function getMarkdownSource(view) {
@@ -78,53 +78,98 @@ function getMarkdownSource(view) {
   };
 }
 
-// src/pdf/print-css.ts
+// src/pdf/css/css-utils.ts
 var import_obsidian2 = require("obsidian");
-async function getLoadedCss(app) {
-  const snippets = await getEnabledSnippets(app);
-  const result = [];
-  for (const snippet of snippets) {
-    const split = splitPrintCss(snippet.css);
-    if (split.normal.trim()) {
-      result.push(split.normal);
-    }
-    if (split.print.trim()) {
-      result.push(split.print);
-    }
-  }
-  return result.join("\n");
+function getMarkdownRoot() {
+  return document.querySelector(".markdown-preview-view");
 }
-async function getEnabledSnippets(app) {
-  const appearancePath = (0, import_obsidian2.normalizePath)(
-    `${app.vault.configDir}/appearance.json`
-  );
-  let appearance = {};
-  try {
-    const text = await app.vault.adapter.read(appearancePath);
-    appearance = JSON.parse(text);
-  } catch (error) {
-    console.warn("PDF Export Preview: failed to read appearance.json", error);
-    return [];
+function isOwnPluginStylesheet(sheet) {
+  const owner = sheet.ownerNode;
+  if (owner instanceof HTMLStyleElement) {
+    return owner.id === "pdf-export-plugin-styles";
   }
-  const enabled = appearance.enabledCssSnippets ?? [];
-  const result = [];
-  for (const snippetName of enabled) {
-    const fileName = snippetName.toLowerCase().endsWith(".css") ? snippetName : `${snippetName}.css`;
-    const snippetPath = (0, import_obsidian2.normalizePath)(
-      `${app.vault.configDir}/snippets/${fileName}`
-    );
-    try {
-      const css = await app.vault.adapter.read(snippetPath);
-      result.push({
-        name: fileName,
-        css
-      });
-    } catch (error) {
-      console.warn(
-        `PDF Export Preview: failed to read snippet "${snippetName}"`,
-        error
-      );
+  if (owner instanceof HTMLLinkElement) {
+    return owner.href.toLowerCase().includes("/plugins/pdf-export-settings/");
+  }
+  return false;
+}
+function isPluginOrThemeStylesheet(sheet) {
+  const owner = sheet.ownerNode;
+  if (owner instanceof HTMLLinkElement) {
+    const href = owner.href.toLowerCase();
+    return href.includes("/plugins/") || href.includes("/themes/");
+  }
+  return false;
+}
+function isSnippetStylesheet(sheet) {
+  const owner = sheet.ownerNode;
+  if (owner instanceof HTMLLinkElement) {
+    return owner.href.toLowerCase().includes("/snippets/");
+  }
+  return false;
+}
+function getSnippetBaseUrl(app, fileName) {
+  return `${document.baseURI}${(0, import_obsidian2.normalizePath)(
+    `${app.vault.configDir}/snippets/${fileName}`
+  )}`;
+}
+function ruleMatchesMarkdown(selector, markdownRoot) {
+  const selectors = splitSelectors(selector);
+  for (const rawSelector of selectors) {
+    const value = rawSelector.trim();
+    if (!value) {
+      continue;
     }
+    if (value === ":root" || value === "html" || value === "body") {
+      return true;
+    }
+    try {
+      if (markdownRoot.matches(value) || markdownRoot.querySelector(value)) {
+        return true;
+      }
+    } catch {
+    }
+  }
+  return false;
+}
+function splitSelectors(selector) {
+  const result = [];
+  let current = "";
+  let depth = 0;
+  let quote = "";
+  for (let i = 0; i < selector.length; i++) {
+    const char = selector[i];
+    if (quote) {
+      current += char;
+      if (char === quote && selector[i - 1] !== "\\") {
+        quote = "";
+      }
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === "(" || char === "[") {
+      depth++;
+      current += char;
+      continue;
+    }
+    if (char === ")" || char === "]") {
+      depth--;
+      current += char;
+      continue;
+    }
+    if (char === "," && depth === 0) {
+      result.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current.trim()) {
+    result.push(current);
   }
   return result;
 }
@@ -200,6 +245,268 @@ function findMatchingBrace(text, openBrace) {
   }
   return -1;
 }
+function absolutizeUrls(css, baseUrl) {
+  return css.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (full, _quote, value) => {
+    const url = String(value).trim();
+    if (!url || url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(url)) {
+      return full;
+    }
+    try {
+      const absolute = new URL(url, baseUrl).href;
+      return `url("${absolute}")`;
+    } catch {
+      return full;
+    }
+  });
+}
+
+// src/pdf/css/css-core.ts
+function collectCoreRule(rule, standard, print, baseUrl, markdownRoot) {
+  if (rule instanceof CSSImportRule) {
+    try {
+      const imported = rule.styleSheet;
+      if (!imported) {
+        return;
+      }
+      const importedBaseUrl = imported.href || baseUrl;
+      for (const nestedRule of Array.from(imported.cssRules)) {
+        collectCoreRule(
+          nestedRule,
+          standard,
+          print,
+          importedBaseUrl,
+          markdownRoot
+        );
+      }
+    } catch {
+    }
+    return;
+  }
+  if (rule instanceof CSSMediaRule) {
+    const condition = rule.conditionText?.toLowerCase().trim() ?? "";
+    if (condition.includes("print")) {
+      for (const nestedRule of Array.from(rule.cssRules)) {
+        collectPrintRule(nestedRule, print, baseUrl, markdownRoot);
+      }
+      return;
+    }
+    const nested = [];
+    for (const nestedRule of Array.from(rule.cssRules)) {
+      collectCoreRule(nestedRule, nested, [], baseUrl, markdownRoot);
+    }
+    if (nested.length) {
+      standard.push(`@media ${rule.conditionText} {
+${nested.join("\n")}
+}`);
+    }
+    return;
+  }
+  if (rule instanceof CSSSupportsRule) {
+    const nestedStandard = [];
+    const nestedPrint = [];
+    for (const nestedRule of Array.from(rule.cssRules)) {
+      collectCoreRule(
+        nestedRule,
+        nestedStandard,
+        nestedPrint,
+        baseUrl,
+        markdownRoot
+      );
+    }
+    if (nestedStandard.length) {
+      standard.push(
+        `@supports ${rule.conditionText} {
+${nestedStandard.join("\n")}
+}`
+      );
+    }
+    if (nestedPrint.length) {
+      print.push(
+        `@supports ${rule.conditionText} {
+${nestedPrint.join("\n")}
+}`
+      );
+    }
+    return;
+  }
+  if (rule instanceof CSSStyleRule) {
+    if (ruleMatchesMarkdown(rule.selectorText, markdownRoot)) {
+      standard.push(absolutizeUrls(rule.cssText, baseUrl));
+    }
+    return;
+  }
+  if (rule instanceof CSSFontFaceRule) {
+    standard.push(absolutizeUrls(rule.cssText, baseUrl));
+    return;
+  }
+  if (rule instanceof CSSKeyframesRule) {
+    standard.push(absolutizeUrls(rule.cssText, baseUrl));
+  }
+}
+function collectPluginThemeRule(rule, result, baseUrl, markdownRoot) {
+  if (rule instanceof CSSImportRule) {
+    try {
+      const imported = rule.styleSheet;
+      if (!imported) {
+        return;
+      }
+      const importedBaseUrl = imported.href || baseUrl;
+      for (const nestedRule of Array.from(imported.cssRules)) {
+        collectPluginThemeRule(
+          nestedRule,
+          result,
+          importedBaseUrl,
+          markdownRoot
+        );
+      }
+    } catch {
+    }
+    return;
+  }
+  if (rule instanceof CSSMediaRule) {
+    const nested = [];
+    for (const nestedRule of Array.from(rule.cssRules)) {
+      collectPluginThemeRule(nestedRule, nested, baseUrl, markdownRoot);
+    }
+    if (nested.length) {
+      result.push(`@media ${rule.conditionText} {
+${nested.join("\n")}
+}`);
+    }
+    return;
+  }
+  if (rule instanceof CSSSupportsRule) {
+    const nested = [];
+    for (const nestedRule of Array.from(rule.cssRules)) {
+      collectPluginThemeRule(nestedRule, nested, baseUrl, markdownRoot);
+    }
+    if (nested.length) {
+      result.push(`@supports ${rule.conditionText} {
+${nested.join("\n")}
+}`);
+    }
+    return;
+  }
+  if (rule instanceof CSSStyleRule) {
+    if (ruleMatchesMarkdown(rule.selectorText, markdownRoot)) {
+      result.push(absolutizeUrls(rule.cssText, baseUrl));
+    }
+    return;
+  }
+  if (rule instanceof CSSFontFaceRule) {
+    result.push(absolutizeUrls(rule.cssText, baseUrl));
+  }
+}
+function collectPrintRule(rule, result, baseUrl, markdownRoot) {
+  if (rule instanceof CSSMediaRule) {
+    for (const nestedRule of Array.from(rule.cssRules)) {
+      collectPrintRule(nestedRule, result, baseUrl, markdownRoot);
+    }
+    return;
+  }
+  if (rule instanceof CSSSupportsRule) {
+    const nested = [];
+    for (const nestedRule of Array.from(rule.cssRules)) {
+      collectPrintRule(nestedRule, nested, baseUrl, markdownRoot);
+    }
+    if (nested.length) {
+      result.push(`@supports ${rule.conditionText} {
+${nested.join("\n")}
+}`);
+    }
+    return;
+  }
+  if (rule instanceof CSSStyleRule) {
+    if (ruleMatchesMarkdown(rule.selectorText, markdownRoot)) {
+      result.push(absolutizeUrls(rule.cssText, baseUrl));
+    }
+    return;
+  }
+  if (rule instanceof CSSFontFaceRule) {
+    result.push(absolutizeUrls(rule.cssText, baseUrl));
+  }
+}
+
+// src/pdf/css/css-snippets.ts
+var import_obsidian3 = require("obsidian");
+async function getEnabledSnippets(app) {
+  const appearancePath = (0, import_obsidian3.normalizePath)(
+    `${app.vault.configDir}/appearance.json`
+  );
+  let appearance = {};
+  try {
+    const text = await app.vault.adapter.read(appearancePath);
+    appearance = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  const enabled = appearance.enabledCssSnippets ?? [];
+  const result = [];
+  for (const name of enabled) {
+    const fileName = name.toLowerCase().endsWith(".css") ? name : `${name}.css`;
+    const path = (0, import_obsidian3.normalizePath)(`${app.vault.configDir}/snippets/${fileName}`);
+    try {
+      const css = await app.vault.adapter.read(path);
+      result.push({
+        name: fileName,
+        css
+      });
+    } catch {
+    }
+  }
+  return result;
+}
+
+// src/pdf/print-css.ts
+async function getLoadedCss(app) {
+  const markdownRoot = getMarkdownRoot();
+  if (!markdownRoot) {
+    return "";
+  }
+  const standard = [];
+  const print = [];
+  const pluginsAndThemes = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    if (isOwnPluginStylesheet(sheet) || isSnippetStylesheet(sheet)) {
+      continue;
+    }
+    try {
+      const rules = sheet.cssRules;
+      if (!rules) {
+        continue;
+      }
+      const baseUrl = sheet.href || document.baseURI;
+      if (isPluginOrThemeStylesheet(sheet)) {
+        for (const rule of Array.from(rules)) {
+          collectPluginThemeRule(rule, pluginsAndThemes, baseUrl, markdownRoot);
+        }
+        continue;
+      }
+      for (const rule of Array.from(rules)) {
+        collectCoreRule(rule, standard, print, baseUrl, markdownRoot);
+      }
+    } catch {
+    }
+  }
+  const snippets = await getEnabledSnippets(app);
+  const snippetCss = [];
+  for (const snippet of snippets) {
+    const baseUrl = getSnippetBaseUrl(app, snippet.name);
+    const split = splitPrintCss(snippet.css);
+    if (split.normal.trim()) {
+      snippetCss.push(absolutizeUrls(split.normal, baseUrl));
+    }
+    if (split.print.trim()) {
+      snippetCss.push(absolutizeUrls(split.print, baseUrl));
+    }
+  }
+  return [
+    standard.join("\n"),
+    print.join("\n"),
+    pluginsAndThemes.join("\n"),
+    snippetCss.join("\n")
+  ].filter((value) => value.trim()).join("\n");
+}
 
 // src/pdf/pagination.ts
 var A4_WIDTH = 794;
@@ -232,7 +539,7 @@ var PdfPreview = class {
     this.header.textContent = "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 PDF";
   }
   async refresh() {
-    const view = this.app.workspace.getActiveViewOfType(import_obsidian3.MarkdownView);
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView);
     if (!view) {
       this.showError("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0443\u044E \u0437\u0430\u043C\u0435\u0442\u043A\u0443");
       return;
@@ -251,7 +558,7 @@ var PdfPreview = class {
     await this.createIframe(html);
   }
   async renderMarkdown(markdown, sourcePath) {
-    const component = new import_obsidian3.Component();
+    const component = new import_obsidian4.Component();
     component.load();
     const root = document.createElement("div");
     const content = document.createElement("div");
@@ -264,7 +571,7 @@ var PdfPreview = class {
     root.appendChild(content);
     document.body.appendChild(root);
     try {
-      await import_obsidian3.MarkdownRenderer.render(
+      await import_obsidian4.MarkdownRenderer.render(
         this.app,
         markdown,
         content,
@@ -349,8 +656,6 @@ body {
 	min-height: ${A4_HEIGHT}px;
 	max-height: ${A4_HEIGHT}px;
 	box-sizing: border-box;
-	margin: 0;
-	padding: 48px;
 	overflow: hidden;
 	position: relative;
 }
@@ -718,7 +1023,7 @@ var PdfModal = class {
   createFontSetting(container) {
     const wrapper = document.createElement("div");
     wrapper.className = "pdf-export-font-size-setting";
-    new import_obsidian4.Setting(wrapper).setName("\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430").setDesc("\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF").addText((text) => {
+    new import_obsidian5.Setting(wrapper).setName("\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430").setDesc("\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF").addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.step = "0.5";
       text.inputEl.min = "1";
@@ -792,7 +1097,7 @@ var PdfModal = class {
 var styles_default = ".pdf-export-layout {\r\n  display: flex !important;\r\n  align-items: flex-start !important;\r\n  gap: 18px !important;\r\n  width: 100% !important;\r\n  height: 100% !important;\r\n  box-sizing: border-box !important;\r\n}\r\n.pdf-export-settings-left {\r\n  flex: 0 0 270px !important;\r\n  width: 270px !important;\r\n  min-width: 0 !important;\r\n  height: 100% !important;\r\n  overflow-y: auto !important;\r\n  overflow-x: hidden !important;\r\n}\r\n.pdf-export-preview-right {\r\n  flex: 0 0 390px !important;\r\n  width: 390px !important;\r\n  min-width: 0 !important;\r\n  display: flex;\r\n  flex-direction: column;\r\n  align-items: center;\r\n}\r\n.pdf-export-preview-header {\r\n  width: 100%;\r\n  text-align: center;\r\n  font-size: 15px;\r\n  font-weight: 600;\r\n  margin-bottom: 8px;\r\n  white-space: nowrap;\r\n}\r\n.pdf-export-preview-navigation {\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: center;\r\n  gap: 6px;\r\n  margin-bottom: 8px;\r\n  min-height: 30px;\r\n}\r\n.pdf-preview-arrow {\r\n  width: 32px;\r\n  height: 30px;\r\n  padding: 0;\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: center;\r\n  border: 1px solid var(--background-modifier-border);\r\n  border-radius: 5px;\r\n  background: var(--background-secondary);\r\n  color: var(--text-normal);\r\n  cursor: pointer;\r\n  font-size: 17px;\r\n  line-height: 1;\r\n}\r\n.pdf-preview-arrow:hover:not(:disabled) {\r\n  background: var(--background-modifier-hover);\r\n}\r\n.pdf-preview-arrow:disabled {\r\n  opacity: 0.4;\r\n  cursor: default;\r\n}\r\n.pdf-preview-page-input {\r\n  width: 48px;\r\n  height: 30px;\r\n  padding: 0 5px;\r\n  box-sizing: border-box;\r\n  text-align: center;\r\n  border: 1px solid var(--background-modifier-border);\r\n  border-radius: 5px;\r\n  background: var(--background-primary);\r\n  color: var(--text-normal);\r\n  font-size: 14px;\r\n}\r\n.pdf-preview-page-input:focus {\r\n  border-color: var(--interactive-accent);\r\n  outline: none;\r\n}\r\n.pdf-preview-page-total {\r\n  font-size: 14px;\r\n  color: var(--text-muted);\r\n}\r\n.pdf-export-preview-viewport {\r\n  position: relative;\r\n  overflow: hidden !important;\r\n  background: var(--background-secondary);\r\n  border-radius: 6px;\r\n  box-sizing: border-box;\r\n  margin: 0 auto;\r\n  flex: none !important;\r\n}\r\n.pdf-export-preview-iframe {\r\n  display: block;\r\n  position: absolute;\r\n  border: 0 !important;\r\n  margin: 0;\r\n  padding: 0;\r\n  background: white;\r\n  overflow: hidden !important;\r\n  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.18);\r\n}\r\n.pdf-export-font-size-setting {\r\n  margin-top: 0;\r\n}\r\n.pdf-export-settings-left .setting-item {\r\n  padding-top: 5px;\r\n  padding-bottom: 5px;\r\n}\r\n.pdf-export-settings-left .setting-item-info {\r\n  min-width: 0;\r\n}\r\n.pdf-export-settings-left .setting-item-name {\r\n  font-size: 14px;\r\n}\r\n.pdf-export-settings-left .setting-item-description {\r\n  font-size: 12px;\r\n}\r\n.pdf-export-settings-left .setting-item-control {\r\n  flex-shrink: 0;\r\n}\r\n.pdf-export-preview-error {\r\n  padding: 20px;\r\n  color: var(--text-error);\r\n  font-size: 14px;\r\n}\r\n@media (max-width: 800px) {\r\n  .pdf-export-layout {\r\n    flex-direction: column !important;\r\n    height: auto !important;\r\n  }\r\n  .pdf-export-settings-left {\r\n    flex: none !important;\r\n    width: 100% !important;\r\n    height: auto !important;\r\n    overflow: visible !important;\r\n  }\r\n  .pdf-export-preview-right {\r\n    flex: none !important;\r\n    width: 100% !important;\r\n  }\r\n  .pdf-export-preview-viewport {\r\n    max-width: 100% !important;\r\n  }\r\n}\r\n";
 
 // src/main.ts
-var PdfExportPlugin = class extends import_obsidian5.Plugin {
+var PdfExportPlugin = class extends import_obsidian6.Plugin {
   pdfSettings;
   pdfModal;
   printFontStyle = null;

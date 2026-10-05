@@ -149,8 +149,6 @@ body {
 	min-height: ${A4_HEIGHT}px;
 	max-height: ${A4_HEIGHT}px;
 	box-sizing: border-box;
-	margin: 0;
-	padding: 48px;
 	overflow: hidden;
 	position: relative;
 }
