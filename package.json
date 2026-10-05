@@ -1,0 +1,16 @@
+{
+  "name": "pdf-export-settings",
+  "version": "1.0.0",
+  "description": "PDF export settings for Obsidian",
+  "main": "main.js",
+  "scripts": {
+    "dev": "esbuild src/main.ts --bundle --external:obsidian --format=cjs --loader:.css=text --outfile=main.js --watch",
+    "build": "esbuild src/main.ts --bundle --external:obsidian --format=cjs --loader:.css=text --outfile=main.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.8.7",
+    "typescript": "^5.0.0"
+  }
+}

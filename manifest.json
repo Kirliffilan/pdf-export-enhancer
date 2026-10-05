@@ -1,0 +1,9 @@
+{
+  "id": "pdf-export-settings",
+  "name": "PDF Export Settings",
+  "version": "1.0.0",
+  "minAppVersion": "1.5.0",
+  "description": "Quick settings for PDF export.",
+  "author": "Kirliffilan",
+  "isDesktopOnly": true
+}
