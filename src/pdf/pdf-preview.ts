@@ -1,8 +1,18 @@
-import { App, Component, MarkdownRenderer, MarkdownView } from "obsidian";
+import { App, MarkdownView } from "obsidian";
 import type { PdfExportSettings } from "../settings/settings";
 import { getMarkdownSource } from "./pdf-source";
-import { getLoadedCss } from "./print-css";
 import { A4_WIDTH, A4_HEIGHT } from "./pagination";
+import { renderMarkdown } from "./preview/preview-renderer";
+import {
+  applyPreviewStyles,
+  waitForIframeResources,
+  writePreviewDocument,
+} from "./preview/preview-document";
+import { paginatePreview } from "./preview/preview-pagination";
+import {
+  renderNavigation,
+  updateNavigation,
+} from "./preview/preview-navigation";
 export class PdfPreview {
   private app: App;
   private settings: PdfExportSettings;
@@ -40,47 +50,16 @@ export class PdfPreview {
       return;
     }
     this.currentPage = 0;
-    const html = await this.renderMarkdown(source.markdown, source.sourcePath);
+    const html = await renderMarkdown(
+      this.app,
+      source.markdown,
+      source.sourcePath,
+    );
     if (!html) {
       this.showError("Ошибка рендера Markdown");
       return;
     }
     await this.createIframe(html);
-  }
-  private async renderMarkdown(
-    markdown: string,
-    sourcePath: string,
-  ): Promise<string> {
-    const component = new Component();
-    component.load();
-    const root = document.createElement("div");
-    const content = document.createElement("div");
-    root.style.position = "fixed";
-    root.style.left = "-100000px";
-    root.style.top = "0";
-    root.style.width = `${A4_WIDTH}px`;
-    root.style.visibility = "hidden";
-    root.style.pointerEvents = "none";
-    root.appendChild(content);
-    document.body.appendChild(root);
-    try {
-      await MarkdownRenderer.render(
-        this.app,
-        markdown,
-        content,
-        sourcePath,
-        component,
-      );
-      await this.waitForLayout();
-      const html = content.innerHTML.trim();
-      return html;
-    } catch (error) {
-      console.error("PDF Export Preview: Markdown render error", error);
-      return "";
-    } finally {
-      root.remove();
-      component.unload();
-    }
   }
   private async createIframe(html: string) {
     this.viewport.empty();
@@ -96,270 +75,52 @@ export class PdfPreview {
       this.showError("Не удалось создать preview");
       return;
     }
-    doc.open();
-    doc.write(
-      `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div id="pdf-preview-source"><div class="markdown-preview-view markdown-rendered"><div class="markdown-preview-sizer"><div class="markdown-preview-section">${html}</div></div></div></div></body></html>`,
+    writePreviewDocument(
+      doc,
+      html,
+      this.escapeHtml(document.documentElement.className),
+      this.escapeHtml(document.body.className),
     );
-    doc.close();
-    await this.applyStyles(doc);
-    await this.waitForIframeResources(doc);
-    this.paginate(doc);
+    await applyPreviewStyles(doc, this.app, this.settings);
+    await waitForIframeResources(doc);
+    this.pageCount = paginatePreview(doc);
     this.updateHeader();
     this.renderNavigation();
     this.showPage();
   }
-  private async applyStyles(doc: Document) {
-    const css = await getLoadedCss(this.app);
-    if (css.trim()) {
-      const style = doc.createElement("style");
-      style.textContent = css;
-      doc.head.appendChild(style);
-    }
-    const style = doc.createElement("style");
-    style.textContent = this.getPreviewCss();
-    doc.head.appendChild(style);
-  }
-  private getPreviewCss(): string {
-    return `
-* {
-	box-sizing: border-box;
-}
-html {
-	margin: 0;
-	padding: 0;
-}
-body {
-	margin: 0;
-	padding: 0;
-	width: ${A4_WIDTH}px;
-}
-#pdf-preview-source {
-	width: ${A4_WIDTH}px;
-	margin: 0;
-	padding: 0;
-}
-.pdf-preview-pages {
-	width: ${A4_WIDTH}px;
-	margin: 0;
-	padding: 0;
-}
-.pdf-preview-page {
-	width: ${A4_WIDTH}px;
-	height: ${A4_HEIGHT}px;
-	min-height: ${A4_HEIGHT}px;
-	max-height: ${A4_HEIGHT}px;
-	box-sizing: border-box;
-	overflow: hidden;
-	position: relative;
-}
-.pdf-preview-page .markdown-preview-view {
-	width: 100%;
-	max-width: none;
-	min-width: 0;
-	height: auto;
-	min-height: 0;
-	margin: 0;
-	padding: 0;
-	overflow: visible;
-	font-size: ${this.settings.fontSize}px !important;
-}
-.pdf-preview-page .markdown-preview-sizer {
-	width: 100%;
-	max-width: none;
-	min-width: 0;
-	height: auto;
-	min-height: 0;
-	margin: 0;
-	padding: 0;
-	overflow: visible;
-	font-size: ${this.settings.fontSize}px !important;
-}
-.pdf-preview-page .markdown-preview-section {
-	width: 100%;
-	max-width: none;
-	min-width: 0;
-	height: auto;
-	min-height: 0;
-	margin: 0;
-	padding: 0;
-	overflow: visible;
-}
-.pdf-preview-page img {
-	max-width: 100%;
-	height: auto;
-}
-`;
-  }
-  private paginate(doc: Document) {
-    const sourceSection = doc.querySelector(
-      "#pdf-preview-source .markdown-preview-section",
-    ) as HTMLElement | null;
-    if (!sourceSection) {
-      this.pageCount = 1;
-      return;
-    }
-    const nodes = Array.from(sourceSection.children) as HTMLElement[];
-    const pagesContainer = doc.createElement("div");
-    pagesContainer.className = "pdf-preview-pages";
-    const sourceRoot = doc.querySelector("#pdf-preview-source");
-    if (!sourceRoot) {
-      this.pageCount = 1;
-      return;
-    }
-    sourceRoot.replaceChildren(pagesContainer);
-    let currentPage = this.createPage(doc);
-    pagesContainer.appendChild(currentPage);
-    for (const node of nodes) {
-      const section = currentPage.querySelector(
-        ".markdown-preview-section",
-      ) as HTMLElement | null;
-      if (!section) {
-        continue;
-      }
-      section.appendChild(node);
-      if (
-        currentPage.scrollHeight > currentPage.clientHeight &&
-        section.children.length > 1
-      ) {
-        section.lastElementChild?.remove();
-        currentPage = this.createPage(doc);
-        pagesContainer.appendChild(currentPage);
-        const nextSection = currentPage.querySelector(
-          ".markdown-preview-section",
-        ) as HTMLElement | null;
-        nextSection?.appendChild(node);
-      }
-    }
-    const pages = Array.from(
-      pagesContainer.querySelectorAll(".pdf-preview-page"),
-    ) as HTMLElement[];
-    this.pageCount = Math.max(1, pages.length);
-    pages.forEach((page, index) => {
-      page.dataset.page = String(index);
-      page.style.setProperty(
-        "display",
-        index === this.currentPage ? "block" : "none",
-        "important",
-      );
-    });
-  }
-  private createPage(doc: Document): HTMLElement {
-    const page = doc.createElement("div");
-    page.className = "pdf-preview-page";
-    const view = doc.createElement("div");
-    view.className = "markdown-preview-view markdown-rendered";
-    const sizer = doc.createElement("div");
-    sizer.className = "markdown-preview-sizer";
-    const section = doc.createElement("div");
-    section.className = "markdown-preview-section";
-    view.appendChild(sizer);
-    sizer.appendChild(section);
-    page.appendChild(view);
-    return page;
-  }
-  private async waitForLayout() {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          resolve();
-        });
-      });
-    });
-  }
-  private async waitForIframeResources(doc: Document) {
-    try {
-      await doc.fonts.ready;
-    } catch {}
-    await this.waitForIframeLayout();
-  }
-  private async waitForIframeLayout() {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          resolve();
-        });
-      });
-    });
-  }
   private updateHeader() {
-    this.header.textContent = `Предпросмотр PDF — ${this.pageCount} ${this.pageWord(this.pageCount)}`;
+    this.header.textContent = `Предпросмотр PDF — ${this.pageCount} ${this.pageWord(
+      this.pageCount,
+    )}`;
   }
   private renderNavigation() {
-    this.navigation.empty();
-    const previous = document.createElement("button");
-    previous.type = "button";
-    previous.className = "pdf-preview-arrow";
-    previous.textContent = "←";
-    previous.title = "Предыдущая страница";
-    previous.disabled = this.currentPage <= 0;
-    previous.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.currentPage <= 0) {
-        return;
-      }
-      this.currentPage--;
-      this.updateNavigation();
-      this.showPage();
-    });
-    const input = document.createElement("input");
-    input.type = "number";
-    input.className = "pdf-preview-page-input";
-    input.min = "1";
-    input.max = String(this.pageCount);
-    input.value = String(this.currentPage + 1);
-    input.setAttribute("aria-label", "Номер страницы");
-    input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") {
-        return;
-      }
-      event.preventDefault();
-      this.setPageFromInput(input.value);
-      input.blur();
-    });
-    input.addEventListener("change", () => {
-      this.setPageFromInput(input.value);
-    });
-    const total = document.createElement("span");
-    total.className = "pdf-preview-page-total";
-    total.textContent = `/ ${this.pageCount}`;
-    const next = document.createElement("button");
-    next.type = "button";
-    next.className = "pdf-preview-arrow";
-    next.textContent = "→";
-    next.title = "Следующая страница";
-    next.disabled = this.currentPage >= this.pageCount - 1;
-    next.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.currentPage >= this.pageCount - 1) {
-        return;
-      }
-      this.currentPage++;
-      this.updateNavigation();
-      this.showPage();
-    });
-    this.navigation.appendChild(previous);
-    this.navigation.appendChild(input);
-    this.navigation.appendChild(total);
-    this.navigation.appendChild(next);
+    renderNavigation(
+      this.navigation,
+      this.currentPage,
+      this.pageCount,
+      () => {
+        if (this.currentPage <= 0) {
+          return;
+        }
+        this.currentPage--;
+        this.updateNavigation();
+        this.showPage();
+      },
+      () => {
+        if (this.currentPage >= this.pageCount - 1) {
+          return;
+        }
+        this.currentPage++;
+        this.updateNavigation();
+        this.showPage();
+      },
+      (value) => {
+        this.setPageFromInput(value);
+      },
+    );
   }
   private updateNavigation() {
-    const input = this.navigation.querySelector(
-      ".pdf-preview-page-input",
-    ) as HTMLInputElement | null;
-    if (input) {
-      input.value = String(this.currentPage + 1);
-    }
-    const buttons = this.navigation.querySelectorAll(".pdf-preview-arrow");
-    const previous = buttons[0] as HTMLButtonElement | undefined;
-    const next = buttons[1] as HTMLButtonElement | undefined;
-    if (previous) {
-      previous.disabled = this.currentPage <= 0;
-    }
-    if (next) {
-      next.disabled = this.currentPage >= this.pageCount - 1;
-    }
+    updateNavigation(this.navigation, this.currentPage, this.pageCount);
   }
   private setPageFromInput(value: string) {
     let page = Number.parseInt(value, 10);

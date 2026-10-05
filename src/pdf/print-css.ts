@@ -1,4 +1,4 @@
-import { App } from "obsidian";
+import { App, normalizePath } from "obsidian";
 import { collectCoreRule, collectPluginThemeRule } from "./css/css-core";
 import { getEnabledSnippets } from "./css/css-snippets";
 import {
@@ -10,48 +10,68 @@ import {
   isSnippetStylesheet,
   splitPrintCss,
 } from "./css/css-utils";
+
 export async function getLoadedCss(app: App): Promise<string> {
   const markdownRoot = getMarkdownRoot();
+
   if (!markdownRoot) {
     return "";
   }
+
   const standard: string[] = [];
   const print: string[] = [];
   const pluginsAndThemes: string[] = [];
+
   for (const sheet of Array.from(document.styleSheets)) {
     if (isOwnPluginStylesheet(sheet) || isSnippetStylesheet(sheet)) {
       continue;
     }
+
     try {
       const rules = sheet.cssRules;
+
       if (!rules) {
         continue;
       }
+
       const baseUrl = sheet.href || document.baseURI;
+
       if (isPluginOrThemeStylesheet(sheet)) {
         for (const rule of Array.from(rules)) {
           collectPluginThemeRule(rule, pluginsAndThemes, baseUrl, markdownRoot);
         }
+
         continue;
       }
+
       for (const rule of Array.from(rules)) {
         collectCoreRule(rule, standard, print, baseUrl, markdownRoot);
       }
     } catch {}
   }
+
+  const styleSettingsCss = getStyleSettingsCss();
+
   const snippets = await getEnabledSnippets(app);
+
   const snippetCss: string[] = [];
+
   for (const snippet of snippets) {
     const baseUrl = getSnippetBaseUrl(app, snippet.name);
+
     const split = splitPrintCss(snippet.css);
+
     if (split.normal.trim()) {
       snippetCss.push(absolutizeUrls(split.normal, baseUrl));
     }
+
     if (split.print.trim()) {
       snippetCss.push(absolutizeUrls(split.print, baseUrl));
     }
   }
+
   return [
+    styleSettingsCss,
     standard.join("\n"),
     print.join("\n"),
     pluginsAndThemes.join("\n"),
@@ -59,4 +79,14 @@ export async function getLoadedCss(app: App): Promise<string> {
   ]
     .filter((value) => value.trim())
     .join("\n");
+}
+
+function getStyleSettingsCss(): string {
+  const style = document.getElementById("css-settings-manager");
+
+  if (!(style instanceof HTMLStyleElement)) {
+    return "";
+  }
+
+  return style.textContent || "";
 }

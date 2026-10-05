@@ -22,7 +22,7 @@ __export(main_exports, {
   default: () => PdfExportPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/settings/settings.ts
 var DEFAULT_SETTINGS = {
@@ -30,7 +30,7 @@ var DEFAULT_SETTINGS = {
 };
 
 // src/pdf/pdf-modal.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/settings/settings-tab.ts
 var import_obsidian = require("obsidian");
@@ -64,7 +64,7 @@ var PdfExportSettingTab = class extends import_obsidian.PluginSettingTab {
 };
 
 // src/pdf/pdf-preview.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/pdf/pdf-source.ts
 function getMarkdownSource(view) {
@@ -78,8 +78,55 @@ function getMarkdownSource(view) {
   };
 }
 
-// src/pdf/css/css-utils.ts
+// src/pdf/pagination.ts
+var A4_WIDTH = 794;
+var A4_HEIGHT = 1123;
+
+// src/pdf/preview/preview-renderer.ts
 var import_obsidian2 = require("obsidian");
+async function renderMarkdown(app, markdown, sourcePath) {
+  const component = new import_obsidian2.Component();
+  component.load();
+  const root = document.createElement("div");
+  const content = document.createElement("div");
+  root.style.position = "fixed";
+  root.style.left = "-100000px";
+  root.style.top = "0";
+  root.style.width = "794px";
+  root.style.visibility = "hidden";
+  root.style.pointerEvents = "none";
+  root.appendChild(content);
+  document.body.appendChild(root);
+  try {
+    await import_obsidian2.MarkdownRenderer.render(
+      app,
+      markdown,
+      content,
+      sourcePath,
+      component
+    );
+    await waitForLayout();
+    return content.innerHTML.trim();
+  } catch (error) {
+    console.error("PDF Export Preview: Markdown render error", error);
+    return "";
+  } finally {
+    root.remove();
+    component.unload();
+  }
+}
+async function waitForLayout() {
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+}
+
+// src/pdf/css/css-utils.ts
+var import_obsidian3 = require("obsidian");
 function getMarkdownRoot() {
   return document.querySelector(".markdown-preview-view");
 }
@@ -99,6 +146,10 @@ function isPluginOrThemeStylesheet(sheet) {
     const href = owner.href.toLowerCase();
     return href.includes("/plugins/") || href.includes("/themes/");
   }
+  if (owner instanceof HTMLStyleElement) {
+    const id = owner.id.toLowerCase();
+    return id.includes("plugin") || id.includes("theme");
+  }
   return false;
 }
 function isSnippetStylesheet(sheet) {
@@ -109,7 +160,7 @@ function isSnippetStylesheet(sheet) {
   return false;
 }
 function getSnippetBaseUrl(app, fileName) {
-  return `${document.baseURI}${(0, import_obsidian2.normalizePath)(
+  return `${document.baseURI}${(0, import_obsidian3.normalizePath)(
     `${app.vault.configDir}/snippets/${fileName}`
   )}`;
 }
@@ -388,12 +439,14 @@ ${nested.join("\n")}
     return;
   }
   if (rule instanceof CSSStyleRule) {
-    if (ruleMatchesMarkdown(rule.selectorText, markdownRoot)) {
-      result.push(absolutizeUrls(rule.cssText, baseUrl));
-    }
+    result.push(absolutizeUrls(rule.cssText, baseUrl));
     return;
   }
   if (rule instanceof CSSFontFaceRule) {
+    result.push(absolutizeUrls(rule.cssText, baseUrl));
+    return;
+  }
+  if (rule instanceof CSSKeyframesRule) {
     result.push(absolutizeUrls(rule.cssText, baseUrl));
   }
 }
@@ -428,9 +481,9 @@ ${nested.join("\n")}
 }
 
 // src/pdf/css/css-snippets.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 async function getEnabledSnippets(app) {
-  const appearancePath = (0, import_obsidian3.normalizePath)(
+  const appearancePath = (0, import_obsidian4.normalizePath)(
     `${app.vault.configDir}/appearance.json`
   );
   let appearance = {};
@@ -444,7 +497,7 @@ async function getEnabledSnippets(app) {
   const result = [];
   for (const name of enabled) {
     const fileName = name.toLowerCase().endsWith(".css") ? name : `${name}.css`;
-    const path = (0, import_obsidian3.normalizePath)(`${app.vault.configDir}/snippets/${fileName}`);
+    const path = (0, import_obsidian4.normalizePath)(`${app.vault.configDir}/snippets/${fileName}`);
     try {
       const css = await app.vault.adapter.read(path);
       result.push({
@@ -488,6 +541,7 @@ async function getLoadedCss(app) {
     } catch {
     }
   }
+  const styleSettingsCss = getStyleSettingsCss();
   const snippets = await getEnabledSnippets(app);
   const snippetCss = [];
   for (const snippet of snippets) {
@@ -501,16 +555,334 @@ async function getLoadedCss(app) {
     }
   }
   return [
+    styleSettingsCss,
     standard.join("\n"),
     print.join("\n"),
     pluginsAndThemes.join("\n"),
     snippetCss.join("\n")
   ].filter((value) => value.trim()).join("\n");
 }
+function getStyleSettingsCss() {
+  const style = document.getElementById("css-settings-manager");
+  if (!(style instanceof HTMLStyleElement)) {
+    return "";
+  }
+  return style.textContent || "";
+}
 
-// src/pdf/pagination.ts
-var A4_WIDTH = 794;
-var A4_HEIGHT = 1123;
+// src/pdf/preview/preview-document.ts
+function writePreviewDocument(doc, html, htmlClasses, bodyClasses) {
+  doc.open();
+  doc.write(
+    `<!DOCTYPE html><html class="${htmlClasses}"><head><meta charset="UTF-8"><base href="${escapeAttribute(document.baseURI)}"></head><body class="${bodyClasses}"><div id="pdf-preview-source"><div class="markdown-preview-view markdown-rendered"><div class="markdown-preview-sizer"><div class="markdown-preview-section">${html}</div></div></div></div></body></html>`
+  );
+  doc.close();
+}
+async function applyPreviewStyles(doc, app, settings) {
+  await appendParentStyles(doc);
+  const css = await getLoadedCss(app);
+  if (css.trim()) {
+    const style = doc.createElement("style");
+    style.textContent = css;
+    doc.head.appendChild(style);
+  }
+  const previewStyle = doc.createElement("style");
+  previewStyle.textContent = getPreviewCss(settings);
+  doc.head.appendChild(previewStyle);
+}
+async function appendParentStyles(doc) {
+  const stylesheetLinks = [];
+  for (const node of Array.from(document.head.children)) {
+    if (node instanceof HTMLLinkElement) {
+      if (!isStylesheetLink(node)) {
+        continue;
+      }
+      if (isOwnPluginLink(node)) {
+        continue;
+      }
+      const link = doc.createElement("link");
+      link.rel = "stylesheet";
+      link.href = node.href;
+      if (node.media) {
+        link.media = node.media;
+      }
+      doc.head.appendChild(link);
+      stylesheetLinks.push(link);
+      continue;
+    }
+    if (node instanceof HTMLStyleElement) {
+      if (isOwnPluginStyle(node)) {
+        continue;
+      }
+      const style = doc.createElement("style");
+      style.textContent = node.textContent || "";
+      doc.head.appendChild(style);
+    }
+  }
+  await Promise.all(stylesheetLinks.map((link) => waitForStylesheet(link)));
+}
+function isStylesheetLink(node) {
+  const rel = node.rel.toLowerCase().split(/\s+/).filter(Boolean);
+  return rel.includes("stylesheet");
+}
+function isOwnPluginLink(node) {
+  return node.href.toLowerCase().includes("/plugins/pdf-export-settings/");
+}
+function isOwnPluginStyle(node) {
+  return node.id === "pdf-export-plugin-styles" || node.id === "pdf-export-plugin-print-font";
+}
+function waitForStylesheet(link) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve();
+    };
+    link.addEventListener("load", finish, { once: true });
+    link.addEventListener("error", finish, { once: true });
+    window.setTimeout(finish, 3e3);
+  });
+}
+function escapeAttribute(value) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function getPreviewCss(settings) {
+  return `
+* {
+	box-sizing: border-box;
+}
+html {
+	margin: 0 !important;
+	padding: 0 !important;
+	width: ${A4_WIDTH}px !important;
+	min-width: ${A4_WIDTH}px !important;
+	background: white !important;
+}
+body {
+	margin: 0 !important;
+	padding: 0 !important;
+	width: ${A4_WIDTH}px !important;
+	min-width: ${A4_WIDTH}px !important;
+	background: white !important;
+	overflow: visible !important;
+	font-size: ${settings.fontSize}px !important;
+	--font-text-size: ${settings.fontSize}px !important;
+}
+#pdf-preview-source {
+	width: ${A4_WIDTH}px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+.pdf-preview-pages {
+	width: ${A4_WIDTH}px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+.pdf-preview-page {
+	width: ${A4_WIDTH}px !important;
+	height: ${A4_HEIGHT}px !important;
+	min-height: ${A4_HEIGHT}px !important;
+	max-height: ${A4_HEIGHT}px !important;
+	box-sizing: border-box !important;
+	position: relative !important;
+	overflow: hidden !important;
+	margin: 0 !important;
+	padding: 48px !important;
+	background: white !important;
+	color: black !important;
+}
+.pdf-preview-page .markdown-preview-view {
+	width: 100% !important;
+	max-width: none !important;
+	min-width: 0 !important;
+	height: auto !important;
+	min-height: 0 !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	overflow: visible !important;
+	background: transparent !important;
+	font-size: ${settings.fontSize}px !important;
+	--font-text-size: ${settings.fontSize}px !important;
+}
+.pdf-preview-page .markdown-preview-sizer {
+	width: 100% !important;
+	max-width: none !important;
+	min-width: 0 !important;
+	height: auto !important;
+	min-height: 0 !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	overflow: visible !important;
+}
+.pdf-preview-page .markdown-preview-section {
+	width: 100% !important;
+	max-width: none !important;
+	min-width: 0 !important;
+	height: auto !important;
+	min-height: 0 !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	overflow: visible !important;
+}
+.pdf-preview-page img {
+	max-width: 100% !important;
+	height: auto !important;
+}
+`;
+}
+async function waitForIframeResources(doc) {
+  try {
+    await doc.fonts.ready;
+  } catch {
+  }
+  await waitForIframeLayout();
+}
+async function waitForIframeLayout() {
+  await new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  });
+}
+
+// src/pdf/preview/preview-pagination.ts
+function paginatePreview(doc) {
+  const sourceSection = doc.querySelector(
+    "#pdf-preview-source .markdown-preview-section"
+  );
+  if (!sourceSection) {
+    return 1;
+  }
+  const nodes = Array.from(sourceSection.children);
+  const pagesContainer = doc.createElement("div");
+  pagesContainer.className = "pdf-preview-pages";
+  const sourceRoot = doc.querySelector("#pdf-preview-source");
+  if (!sourceRoot) {
+    return 1;
+  }
+  sourceRoot.replaceChildren(pagesContainer);
+  let currentPage = createPage(doc);
+  pagesContainer.appendChild(currentPage);
+  for (const node of nodes) {
+    const section = currentPage.querySelector(
+      ".markdown-preview-section"
+    );
+    if (!section) {
+      continue;
+    }
+    section.appendChild(node);
+    if (currentPage.scrollHeight > currentPage.clientHeight && section.children.length > 1) {
+      section.lastElementChild?.remove();
+      currentPage = createPage(doc);
+      pagesContainer.appendChild(currentPage);
+      const nextSection = currentPage.querySelector(
+        ".markdown-preview-section"
+      );
+      nextSection?.appendChild(node);
+    }
+  }
+  const pages = Array.from(
+    pagesContainer.querySelectorAll(".pdf-preview-page")
+  );
+  pages.forEach((page, index) => {
+    page.dataset.page = String(index);
+    page.style.setProperty(
+      "display",
+      index === 0 ? "block" : "none",
+      "important"
+    );
+  });
+  return Math.max(1, pages.length);
+}
+function createPage(doc) {
+  const page = doc.createElement("div");
+  page.className = "pdf-preview-page";
+  const view = doc.createElement("div");
+  view.className = "markdown-preview-view markdown-rendered";
+  const sizer = doc.createElement("div");
+  sizer.className = "markdown-preview-sizer";
+  const section = doc.createElement("div");
+  section.className = "markdown-preview-section";
+  view.appendChild(sizer);
+  sizer.appendChild(section);
+  page.appendChild(view);
+  return page;
+}
+
+// src/pdf/preview/preview-navigation.ts
+function renderNavigation(container, currentPage, pageCount, onPrevious, onNext, onSetPage) {
+  container.empty();
+  const previous = document.createElement("button");
+  previous.type = "button";
+  previous.className = "pdf-preview-arrow";
+  previous.textContent = "\u2190";
+  previous.title = "\u041F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430";
+  previous.disabled = currentPage <= 0;
+  previous.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onPrevious();
+  });
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "pdf-preview-page-input";
+  input.min = "1";
+  input.max = String(pageCount);
+  input.value = String(currentPage + 1);
+  input.setAttribute("aria-label", "\u041D\u043E\u043C\u0435\u0440 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B");
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    onSetPage(input.value);
+    input.blur();
+  });
+  input.addEventListener("change", () => {
+    onSetPage(input.value);
+  });
+  const total = document.createElement("span");
+  total.className = "pdf-preview-page-total";
+  total.textContent = `/ ${pageCount}`;
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "pdf-preview-arrow";
+  next.textContent = "\u2192";
+  next.title = "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0430\u044F \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430";
+  next.disabled = currentPage >= pageCount - 1;
+  next.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onNext();
+  });
+  container.appendChild(previous);
+  container.appendChild(input);
+  container.appendChild(total);
+  container.appendChild(next);
+}
+function updateNavigation(container, currentPage, pageCount) {
+  const input = container.querySelector(
+    ".pdf-preview-page-input"
+  );
+  if (input) {
+    input.value = String(currentPage + 1);
+    input.max = String(pageCount);
+  }
+  const buttons = container.querySelectorAll(".pdf-preview-arrow");
+  const previous = buttons[0];
+  const next = buttons[1];
+  if (previous) {
+    previous.disabled = currentPage <= 0;
+  }
+  if (next) {
+    next.disabled = currentPage >= pageCount - 1;
+  }
+}
 
 // src/pdf/pdf-preview.ts
 var PdfPreview = class {
@@ -539,7 +911,7 @@ var PdfPreview = class {
     this.header.textContent = "\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 PDF";
   }
   async refresh() {
-    const view = this.app.workspace.getActiveViewOfType(import_obsidian4.MarkdownView);
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView);
     if (!view) {
       this.showError("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u043B\u0443\u0447\u0438\u0442\u044C \u0442\u0435\u043A\u0443\u0449\u0443\u044E \u0437\u0430\u043C\u0435\u0442\u043A\u0443");
       return;
@@ -550,44 +922,16 @@ var PdfPreview = class {
       return;
     }
     this.currentPage = 0;
-    const html = await this.renderMarkdown(source.markdown, source.sourcePath);
+    const html = await renderMarkdown(
+      this.app,
+      source.markdown,
+      source.sourcePath
+    );
     if (!html) {
       this.showError("\u041E\u0448\u0438\u0431\u043A\u0430 \u0440\u0435\u043D\u0434\u0435\u0440\u0430 Markdown");
       return;
     }
     await this.createIframe(html);
-  }
-  async renderMarkdown(markdown, sourcePath) {
-    const component = new import_obsidian4.Component();
-    component.load();
-    const root = document.createElement("div");
-    const content = document.createElement("div");
-    root.style.position = "fixed";
-    root.style.left = "-100000px";
-    root.style.top = "0";
-    root.style.width = `${A4_WIDTH}px`;
-    root.style.visibility = "hidden";
-    root.style.pointerEvents = "none";
-    root.appendChild(content);
-    document.body.appendChild(root);
-    try {
-      await import_obsidian4.MarkdownRenderer.render(
-        this.app,
-        markdown,
-        content,
-        sourcePath,
-        component
-      );
-      await this.waitForLayout();
-      const html = content.innerHTML.trim();
-      return html;
-    } catch (error) {
-      console.error("PDF Export Preview: Markdown render error", error);
-      return "";
-    } finally {
-      root.remove();
-      component.unload();
-    }
   }
   async createIframe(html) {
     this.viewport.empty();
@@ -603,268 +947,52 @@ var PdfPreview = class {
       this.showError("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0437\u0434\u0430\u0442\u044C preview");
       return;
     }
-    doc.open();
-    doc.write(
-      `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><div id="pdf-preview-source"><div class="markdown-preview-view markdown-rendered"><div class="markdown-preview-sizer"><div class="markdown-preview-section">${html}</div></div></div></div></body></html>`
+    writePreviewDocument(
+      doc,
+      html,
+      this.escapeHtml(document.documentElement.className),
+      this.escapeHtml(document.body.className)
     );
-    doc.close();
-    await this.applyStyles(doc);
-    await this.waitForIframeResources(doc);
-    this.paginate(doc);
+    await applyPreviewStyles(doc, this.app, this.settings);
+    await waitForIframeResources(doc);
+    this.pageCount = paginatePreview(doc);
     this.updateHeader();
     this.renderNavigation();
     this.showPage();
   }
-  async applyStyles(doc) {
-    const css = await getLoadedCss(this.app);
-    if (css.trim()) {
-      const style2 = doc.createElement("style");
-      style2.textContent = css;
-      doc.head.appendChild(style2);
-    }
-    const style = doc.createElement("style");
-    style.textContent = this.getPreviewCss();
-    doc.head.appendChild(style);
-  }
-  getPreviewCss() {
-    return `
-* {
-	box-sizing: border-box;
-}
-html {
-	margin: 0;
-	padding: 0;
-}
-body {
-	margin: 0;
-	padding: 0;
-	width: ${A4_WIDTH}px;
-}
-#pdf-preview-source {
-	width: ${A4_WIDTH}px;
-	margin: 0;
-	padding: 0;
-}
-.pdf-preview-pages {
-	width: ${A4_WIDTH}px;
-	margin: 0;
-	padding: 0;
-}
-.pdf-preview-page {
-	width: ${A4_WIDTH}px;
-	height: ${A4_HEIGHT}px;
-	min-height: ${A4_HEIGHT}px;
-	max-height: ${A4_HEIGHT}px;
-	box-sizing: border-box;
-	overflow: hidden;
-	position: relative;
-}
-.pdf-preview-page .markdown-preview-view {
-	width: 100%;
-	max-width: none;
-	min-width: 0;
-	height: auto;
-	min-height: 0;
-	margin: 0;
-	padding: 0;
-	overflow: visible;
-	font-size: ${this.settings.fontSize}px !important;
-}
-.pdf-preview-page .markdown-preview-sizer {
-	width: 100%;
-	max-width: none;
-	min-width: 0;
-	height: auto;
-	min-height: 0;
-	margin: 0;
-	padding: 0;
-	overflow: visible;
-	font-size: ${this.settings.fontSize}px !important;
-}
-.pdf-preview-page .markdown-preview-section {
-	width: 100%;
-	max-width: none;
-	min-width: 0;
-	height: auto;
-	min-height: 0;
-	margin: 0;
-	padding: 0;
-	overflow: visible;
-}
-.pdf-preview-page img {
-	max-width: 100%;
-	height: auto;
-}
-`;
-  }
-  paginate(doc) {
-    const sourceSection = doc.querySelector(
-      "#pdf-preview-source .markdown-preview-section"
-    );
-    if (!sourceSection) {
-      this.pageCount = 1;
-      return;
-    }
-    const nodes = Array.from(sourceSection.children);
-    const pagesContainer = doc.createElement("div");
-    pagesContainer.className = "pdf-preview-pages";
-    const sourceRoot = doc.querySelector("#pdf-preview-source");
-    if (!sourceRoot) {
-      this.pageCount = 1;
-      return;
-    }
-    sourceRoot.replaceChildren(pagesContainer);
-    let currentPage = this.createPage(doc);
-    pagesContainer.appendChild(currentPage);
-    for (const node of nodes) {
-      const section = currentPage.querySelector(
-        ".markdown-preview-section"
-      );
-      if (!section) {
-        continue;
-      }
-      section.appendChild(node);
-      if (currentPage.scrollHeight > currentPage.clientHeight && section.children.length > 1) {
-        section.lastElementChild?.remove();
-        currentPage = this.createPage(doc);
-        pagesContainer.appendChild(currentPage);
-        const nextSection = currentPage.querySelector(
-          ".markdown-preview-section"
-        );
-        nextSection?.appendChild(node);
-      }
-    }
-    const pages = Array.from(
-      pagesContainer.querySelectorAll(".pdf-preview-page")
-    );
-    this.pageCount = Math.max(1, pages.length);
-    pages.forEach((page, index) => {
-      page.dataset.page = String(index);
-      page.style.setProperty(
-        "display",
-        index === this.currentPage ? "block" : "none",
-        "important"
-      );
-    });
-  }
-  createPage(doc) {
-    const page = doc.createElement("div");
-    page.className = "pdf-preview-page";
-    const view = doc.createElement("div");
-    view.className = "markdown-preview-view markdown-rendered";
-    const sizer = doc.createElement("div");
-    sizer.className = "markdown-preview-sizer";
-    const section = doc.createElement("div");
-    section.className = "markdown-preview-section";
-    view.appendChild(sizer);
-    sizer.appendChild(section);
-    page.appendChild(view);
-    return page;
-  }
-  async waitForLayout() {
-    await new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          resolve();
-        });
-      });
-    });
-  }
-  async waitForIframeResources(doc) {
-    try {
-      await doc.fonts.ready;
-    } catch {
-    }
-    await this.waitForIframeLayout();
-  }
-  async waitForIframeLayout() {
-    await new Promise((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          resolve();
-        });
-      });
-    });
-  }
   updateHeader() {
-    this.header.textContent = `\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 PDF \u2014 ${this.pageCount} ${this.pageWord(this.pageCount)}`;
+    this.header.textContent = `\u041F\u0440\u0435\u0434\u043F\u0440\u043E\u0441\u043C\u043E\u0442\u0440 PDF \u2014 ${this.pageCount} ${this.pageWord(
+      this.pageCount
+    )}`;
   }
   renderNavigation() {
-    this.navigation.empty();
-    const previous = document.createElement("button");
-    previous.type = "button";
-    previous.className = "pdf-preview-arrow";
-    previous.textContent = "\u2190";
-    previous.title = "\u041F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0430\u044F \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430";
-    previous.disabled = this.currentPage <= 0;
-    previous.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.currentPage <= 0) {
-        return;
+    renderNavigation(
+      this.navigation,
+      this.currentPage,
+      this.pageCount,
+      () => {
+        if (this.currentPage <= 0) {
+          return;
+        }
+        this.currentPage--;
+        this.updateNavigation();
+        this.showPage();
+      },
+      () => {
+        if (this.currentPage >= this.pageCount - 1) {
+          return;
+        }
+        this.currentPage++;
+        this.updateNavigation();
+        this.showPage();
+      },
+      (value) => {
+        this.setPageFromInput(value);
       }
-      this.currentPage--;
-      this.updateNavigation();
-      this.showPage();
-    });
-    const input = document.createElement("input");
-    input.type = "number";
-    input.className = "pdf-preview-page-input";
-    input.min = "1";
-    input.max = String(this.pageCount);
-    input.value = String(this.currentPage + 1);
-    input.setAttribute("aria-label", "\u041D\u043E\u043C\u0435\u0440 \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u044B");
-    input.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") {
-        return;
-      }
-      event.preventDefault();
-      this.setPageFromInput(input.value);
-      input.blur();
-    });
-    input.addEventListener("change", () => {
-      this.setPageFromInput(input.value);
-    });
-    const total = document.createElement("span");
-    total.className = "pdf-preview-page-total";
-    total.textContent = `/ ${this.pageCount}`;
-    const next = document.createElement("button");
-    next.type = "button";
-    next.className = "pdf-preview-arrow";
-    next.textContent = "\u2192";
-    next.title = "\u0421\u043B\u0435\u0434\u0443\u044E\u0449\u0430\u044F \u0441\u0442\u0440\u0430\u043D\u0438\u0446\u0430";
-    next.disabled = this.currentPage >= this.pageCount - 1;
-    next.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (this.currentPage >= this.pageCount - 1) {
-        return;
-      }
-      this.currentPage++;
-      this.updateNavigation();
-      this.showPage();
-    });
-    this.navigation.appendChild(previous);
-    this.navigation.appendChild(input);
-    this.navigation.appendChild(total);
-    this.navigation.appendChild(next);
+    );
   }
   updateNavigation() {
-    const input = this.navigation.querySelector(
-      ".pdf-preview-page-input"
-    );
-    if (input) {
-      input.value = String(this.currentPage + 1);
-    }
-    const buttons = this.navigation.querySelectorAll(".pdf-preview-arrow");
-    const previous = buttons[0];
-    const next = buttons[1];
-    if (previous) {
-      previous.disabled = this.currentPage <= 0;
-    }
-    if (next) {
-      next.disabled = this.currentPage >= this.pageCount - 1;
-    }
+    updateNavigation(this.navigation, this.currentPage, this.pageCount);
   }
   setPageFromInput(value) {
     let page = Number.parseInt(value, 10);
@@ -1023,7 +1151,7 @@ var PdfModal = class {
   createFontSetting(container) {
     const wrapper = document.createElement("div");
     wrapper.className = "pdf-export-font-size-setting";
-    new import_obsidian5.Setting(wrapper).setName("\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430").setDesc("\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF").addText((text) => {
+    new import_obsidian6.Setting(wrapper).setName("\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430").setDesc("\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF").addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.step = "0.5";
       text.inputEl.min = "1";
@@ -1097,7 +1225,7 @@ var PdfModal = class {
 var styles_default = ".pdf-export-layout {\r\n  display: flex !important;\r\n  align-items: flex-start !important;\r\n  gap: 18px !important;\r\n  width: 100% !important;\r\n  height: 100% !important;\r\n  box-sizing: border-box !important;\r\n}\r\n.pdf-export-settings-left {\r\n  flex: 0 0 270px !important;\r\n  width: 270px !important;\r\n  min-width: 0 !important;\r\n  height: 100% !important;\r\n  overflow-y: auto !important;\r\n  overflow-x: hidden !important;\r\n}\r\n.pdf-export-preview-right {\r\n  flex: 0 0 390px !important;\r\n  width: 390px !important;\r\n  min-width: 0 !important;\r\n  display: flex;\r\n  flex-direction: column;\r\n  align-items: center;\r\n}\r\n.pdf-export-preview-header {\r\n  width: 100%;\r\n  text-align: center;\r\n  font-size: 15px;\r\n  font-weight: 600;\r\n  margin-bottom: 8px;\r\n  white-space: nowrap;\r\n}\r\n.pdf-export-preview-navigation {\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: center;\r\n  gap: 6px;\r\n  margin-bottom: 8px;\r\n  min-height: 30px;\r\n}\r\n.pdf-preview-arrow {\r\n  width: 32px;\r\n  height: 30px;\r\n  padding: 0;\r\n  display: flex;\r\n  align-items: center;\r\n  justify-content: center;\r\n  border: 1px solid var(--background-modifier-border);\r\n  border-radius: 5px;\r\n  background: var(--background-secondary);\r\n  color: var(--text-normal);\r\n  cursor: pointer;\r\n  font-size: 17px;\r\n  line-height: 1;\r\n}\r\n.pdf-preview-arrow:hover:not(:disabled) {\r\n  background: var(--background-modifier-hover);\r\n}\r\n.pdf-preview-arrow:disabled {\r\n  opacity: 0.4;\r\n  cursor: default;\r\n}\r\n.pdf-preview-page-input {\r\n  width: 48px;\r\n  height: 30px;\r\n  padding: 0 5px;\r\n  box-sizing: border-box;\r\n  text-align: center;\r\n  border: 1px solid var(--background-modifier-border);\r\n  border-radius: 5px;\r\n  background: var(--background-primary);\r\n  color: var(--text-normal);\r\n  font-size: 14px;\r\n}\r\n.pdf-preview-page-input:focus {\r\n  border-color: var(--interactive-accent);\r\n  outline: none;\r\n}\r\n.pdf-preview-page-total {\r\n  font-size: 14px;\r\n  color: var(--text-muted);\r\n}\r\n.pdf-export-preview-viewport {\r\n  position: relative;\r\n  overflow: hidden !important;\r\n  background: var(--background-secondary);\r\n  border-radius: 6px;\r\n  box-sizing: border-box;\r\n  margin: 0 auto;\r\n  flex: none !important;\r\n}\r\n.pdf-export-preview-iframe {\r\n  display: block;\r\n  position: absolute;\r\n  border: 0 !important;\r\n  margin: 0;\r\n  padding: 0;\r\n  background: white;\r\n  overflow: hidden !important;\r\n  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.18);\r\n}\r\n.pdf-export-font-size-setting {\r\n  margin-top: 0;\r\n}\r\n.pdf-export-settings-left .setting-item {\r\n  padding-top: 5px;\r\n  padding-bottom: 5px;\r\n}\r\n.pdf-export-settings-left .setting-item-info {\r\n  min-width: 0;\r\n}\r\n.pdf-export-settings-left .setting-item-name {\r\n  font-size: 14px;\r\n}\r\n.pdf-export-settings-left .setting-item-description {\r\n  font-size: 12px;\r\n}\r\n.pdf-export-settings-left .setting-item-control {\r\n  flex-shrink: 0;\r\n}\r\n.pdf-export-preview-error {\r\n  padding: 20px;\r\n  color: var(--text-error);\r\n  font-size: 14px;\r\n}\r\n@media (max-width: 800px) {\r\n  .pdf-export-layout {\r\n    flex-direction: column !important;\r\n    height: auto !important;\r\n  }\r\n  .pdf-export-settings-left {\r\n    flex: none !important;\r\n    width: 100% !important;\r\n    height: auto !important;\r\n    overflow: visible !important;\r\n  }\r\n  .pdf-export-preview-right {\r\n    flex: none !important;\r\n    width: 100% !important;\r\n  }\r\n  .pdf-export-preview-viewport {\r\n    max-width: 100% !important;\r\n  }\r\n}\r\n";
 
 // src/main.ts
-var PdfExportPlugin = class extends import_obsidian6.Plugin {
+var PdfExportPlugin = class extends import_obsidian7.Plugin {
   pdfSettings;
   pdfModal;
   printFontStyle = null;

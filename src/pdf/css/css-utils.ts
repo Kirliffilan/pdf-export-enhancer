@@ -18,6 +18,10 @@ export function isPluginOrThemeStylesheet(sheet: CSSStyleSheet): boolean {
     const href = owner.href.toLowerCase();
     return href.includes("/plugins/") || href.includes("/themes/");
   }
+  if (owner instanceof HTMLStyleElement) {
+    const id = owner.id.toLowerCase();
+    return id.includes("plugin") || id.includes("theme");
+  }
   return false;
 }
 export function isSnippetStylesheet(sheet: CSSStyleSheet): boolean {

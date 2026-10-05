@@ -125,12 +125,14 @@ export function collectPluginThemeRule(
     return;
   }
   if (rule instanceof CSSStyleRule) {
-    if (ruleMatchesMarkdown(rule.selectorText, markdownRoot)) {
-      result.push(absolutizeUrls(rule.cssText, baseUrl));
-    }
+    result.push(absolutizeUrls(rule.cssText, baseUrl));
     return;
   }
   if (rule instanceof CSSFontFaceRule) {
+    result.push(absolutizeUrls(rule.cssText, baseUrl));
+    return;
+  }
+  if (rule instanceof CSSKeyframesRule) {
     result.push(absolutizeUrls(rule.cssText, baseUrl));
   }
 }
