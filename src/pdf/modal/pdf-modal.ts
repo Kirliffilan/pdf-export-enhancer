@@ -7,7 +7,12 @@ import { loadNativePdfSettings } from "./pdf-modal-settings";
 import {
   configurePdfModalSize,
   createFontSetting,
+  createLineSpacingSetting,
   createMarginSettings,
+  createMonochromeSetting,
+  createNativeSettingsControls,
+  createPageBreakSettings,
+  createPageNumberSettings,
   createPdfLayout,
   forceA4,
   hideMarginSetting,
@@ -39,7 +44,7 @@ export class PdfModal {
       childList: true,
       subtree: true,
     });
-    this.loadNativeSettings();
+    void this.loadNativeSettings();
     void this.trySetup();
   }
   private async loadNativeSettings() {
@@ -158,16 +163,25 @@ export class PdfModal {
     if (!this.nativePdfSettings) {
       return;
     }
-    const checkboxes = Array.from(
-      modal.querySelectorAll('input[type="checkbox"]'),
-    ) as HTMLInputElement[];
-    const fileNameCheckbox = checkboxes[0];
-    const landscapeCheckbox = checkboxes[1];
-    if (fileNameCheckbox) {
-      fileNameCheckbox.checked = this.nativePdfSettings.includeFileName;
-    }
-    if (landscapeCheckbox) {
-      landscapeCheckbox.checked = this.nativePdfSettings.landscape;
+    const settings = Array.from(modal.querySelectorAll(".setting-item"));
+    for (const setting of settings) {
+      const text = setting.textContent?.trim().toLowerCase() ?? "";
+      const checkbox = setting.querySelector(
+        'input[type="checkbox"]',
+      ) as HTMLInputElement | null;
+      if (!checkbox) {
+        continue;
+      }
+      if (
+        text.includes("имя файла") ||
+        text.includes("include file name") ||
+        text.includes("include filename")
+      ) {
+        checkbox.checked = this.nativePdfSettings.includeFileName;
+      }
+      if (text.includes("альбом") || text.includes("landscape")) {
+        checkbox.checked = this.nativePdfSettings.landscape;
+      }
     }
   }
   private setup(modal: Element) {
@@ -194,32 +208,37 @@ export class PdfModal {
     createMarginSettings(layout.left, this.plugin.pdfSettings, () =>
       this.plugin.saveSettings(),
     );
-    this.bindNativeSettings(modal);
+    createLineSpacingSetting(layout.left, this.plugin.pdfSettings, () =>
+      this.plugin.saveSettings(),
+    );
+    createPageNumberSettings(layout.left, this.plugin.pdfSettings, () =>
+      this.plugin.saveSettings(),
+    );
+    createPageBreakSettings(layout.left, this.plugin.pdfSettings, () =>
+      this.plugin.saveSettings(),
+    );
+    createMonochromeSetting(layout.left, this.plugin.pdfSettings, () =>
+      this.plugin.saveSettings(),
+    );
+    createNativeSettingsControls(
+      layout.right,
+      modal,
+      this.nativePdfSettings,
+      (
+        changes: Partial<
+          Pick<NativePdfSettings, "includeFileName" | "landscape">
+        >,
+      ) => {
+        if (!this.nativePdfSettings) {
+          return;
+        }
+        Object.assign(this.nativePdfSettings, changes);
+        this.preview?.setNativeSettings(this.nativePdfSettings);
+        void this.preview?.refresh();
+      },
+    );
     requestAnimationFrame(() => {
       setPreviewHeight(this.preview);
-      void this.preview?.refresh();
-    });
-  }
-  private bindNativeSettings(modal: Element) {
-    const checkboxes = Array.from(
-      modal.querySelectorAll('input[type="checkbox"]'),
-    ) as HTMLInputElement[];
-    const fileNameCheckbox = checkboxes[0];
-    const landscapeCheckbox = checkboxes[1];
-    fileNameCheckbox?.addEventListener("change", () => {
-      if (!this.nativePdfSettings) {
-        return;
-      }
-      this.nativePdfSettings.includeFileName = fileNameCheckbox.checked;
-      this.preview?.setNativeSettings(this.nativePdfSettings);
-      void this.preview?.refresh();
-    });
-    landscapeCheckbox?.addEventListener("change", () => {
-      if (!this.nativePdfSettings) {
-        return;
-      }
-      this.nativePdfSettings.landscape = landscapeCheckbox.checked;
-      this.preview?.setNativeSettings(this.nativePdfSettings);
       void this.preview?.refresh();
     });
   }
@@ -239,5 +258,6 @@ export class PdfModal {
     this.nativeSettingsLoading = null;
     this.setupInProgress = false;
     document.querySelector(".pdf-export-layout")?.remove();
+    document.getElementById("pdf-export-native-icon-styles")?.remove();
   }
 }

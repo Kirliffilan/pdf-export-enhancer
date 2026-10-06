@@ -134,7 +134,7 @@ export class PdfPreview {
     if (refreshId !== this.refreshId) {
       return;
     }
-    this.pageCount = paginatePreview(doc, this.getPageHeight());
+    this.pageCount = paginatePreview(doc, this.getPageHeight(), this.settings);
     this.currentPage = Math.min(Math.max(requestedPage, 0), this.pageCount - 1);
     this.updateHeader();
     this.renderNavigation();
