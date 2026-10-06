@@ -1,7 +1,5 @@
 import { configurePdfModalSize, createPdfLayout } from "./pdf-modal-layout";
-
 import { createNativeSettingsControls } from "./pdf-modal-native-controls";
-
 import {
   createFontSetting,
   createMarginSettings,
@@ -10,7 +8,6 @@ import {
   createPageBreakSettings,
   createMonochromeSetting,
 } from "./pdf-modal-settings-ui";
-
 import {
   forceA4,
   hideScaleSetting,
