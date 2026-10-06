@@ -13,6 +13,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,48 +26,24 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Set version from tag
+      - name: Prepare release version
         env:
           TAG_VERSION: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          node <<'EOF'
-          const fs = require("fs");
+          if ! [[ "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $TAG_VERSION"
+            exit 1
+          fi
 
-          const version = process.env.TAG_VERSION;
+          git fetch origin "$DEFAULT_BRANCH"
 
-          if (!version) {
-            throw new Error("TAG_VERSION is not set");
-          }
+          git checkout --detach "origin/$DEFAULT_BRANCH"
 
-          for (const path of ["manifest.json", "package.json"]) {
-            const data = JSON.parse(fs.readFileSync(path, "utf8"));
-            data.version = version;
-            fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
-          }
+          export TAG_VERSION
+          export MIN_APP_VERSION
 
-          console.log(`Version set to ${version}`);
-          EOF
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
-      - name: Prepare release files
-        run: |
-          mkdir -p release-artifacts
-          cp main.js release-artifacts/main.js
-          cp manifest.json release-artifacts/manifest.json
-
-      - name: Update repository versions
-        env:
-          TAG_VERSION: ${{ github.ref_name }}
-        run: |
-          git fetch origin "${{ github.event.repository.default_branch }}"
-          git checkout --detach "origin/${{ github.event.repository.default_branch }}"
-
-          export MIN_APP_VERSION=$(node -p "require('./manifest.json').minAppVersion")
+          MIN_APP_VERSION=$(node -p "require('./manifest.json').minAppVersion")
 
           node <<'EOF'
           const fs = require("fs");
@@ -82,24 +59,49 @@ jobs:
             throw new Error("MIN_APP_VERSION is not set");
           }
 
-          for (const path of ["manifest.json", "package.json"]) {
-            const data = JSON.parse(fs.readFileSync(path, "utf8"));
-            data.version = version;
-            fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
-          }
-
+          const manifestPath = "manifest.json";
+          const packagePath = "package.json";
           const versionsPath = "versions.json";
+
+          const manifest = JSON.parse(
+            fs.readFileSync(manifestPath, "utf8")
+          );
+
+          manifest.version = version;
+
+          fs.writeFileSync(
+            manifestPath,
+            JSON.stringify(manifest, null, 2) + "\n"
+          );
+
+          const packageJson = JSON.parse(
+            fs.readFileSync(packagePath, "utf8")
+          );
+
+          packageJson.version = version;
+
+          fs.writeFileSync(
+            packagePath,
+            JSON.stringify(packageJson, null, 2) + "\n"
+          );
+
           let versions = {};
 
           if (fs.existsSync(versionsPath)) {
-            versions = JSON.parse(fs.readFileSync(versionsPath, "utf8"));
+            versions = JSON.parse(
+              fs.readFileSync(versionsPath, "utf8")
+            );
           }
+
+          delete versions.undefined;
 
           versions[version] = minAppVersion;
 
           const sortedVersions = Object.fromEntries(
             Object.entries(versions).sort((a, b) =>
-              b[0].localeCompare(a[0], undefined, { numeric: true })
+              b[0].localeCompare(a[0], undefined, {
+                numeric: true
+              })
             )
           );
 
@@ -108,20 +110,45 @@ jobs:
             JSON.stringify(sortedVersions, null, 2) + "\n"
           );
 
-          console.log(`Added ${version}: ${minAppVersion} to versions.json`);
+          console.log(`Release version: ${version}`);
+          console.log(`Minimum Obsidian version: ${minAppVersion}`);
           EOF
 
+      - name: Commit release version
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add manifest.json package.json versions.json
 
           if git diff --cached --quiet; then
-            echo "Version files are already up to date."
+            echo "No changes to commit."
           else
             git commit -m "chore: release ${TAG_VERSION}"
-            git push origin "HEAD:${{ github.event.repository.default_branch }}"
+            git push origin "HEAD:${DEFAULT_BRANCH}"
           fi
+
+      - name: Move release tag
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+        run: |
+          git tag -f "$TAG_VERSION"
+          git push --force origin "$TAG_VERSION"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-artifacts
+          cp main.js release-artifacts/main.js
+          cp manifest.json release-artifacts/manifest.json
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2

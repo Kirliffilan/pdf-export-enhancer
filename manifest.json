@@ -1,10 +1,10 @@
 {
   "id": "pdf-export-enhancer",
   "name": "PDF Export Enhancer",
+  "version": "2.0.0",
   "minAppVersion": "1.8.0",
   "description": "Enhance PDF export with customizable text size, an A4 page preview, page navigation, and support for themes, Style Settings, and CSS snippets.",
   "author": "Kirliffilan",
   "authorUrl": "https://github.com/Kirliffilan",
-  "isDesktopOnly": true,
-  "version": "2.0.0"
+  "isDesktopOnly": true
 }
