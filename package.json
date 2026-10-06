@@ -1,6 +1,5 @@
 {
   "name": "pdf-export-enhancer",
-  "version": "1.1.0",
   "description": "Enhance Obsidian PDF export",
   "main": "main.js",
   "scripts": {
