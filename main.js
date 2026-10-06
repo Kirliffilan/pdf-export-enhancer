@@ -29,9 +29,6 @@ var DEFAULT_SETTINGS = {
   fontSize: 16.5
 };
 
-// src/pdf/pdf-modal.ts
-var import_obsidian6 = require("obsidian");
-
 // src/settings/settings-tab.ts
 var import_obsidian = require("obsidian");
 var PdfExportSettingTab = class extends import_obsidian.PluginSettingTab {
@@ -574,14 +571,33 @@ function getStyleSettingsCss() {
 }
 
 // src/pdf/preview/preview-document.ts
-function writePreviewDocument(doc, html, htmlClasses, bodyClasses) {
+function writePreviewDocument(doc, html, htmlClasses, bodyClasses, fileName = "") {
+  const titleHtml = fileName ? `<h1>${escapeHtml(fileName)}</h1>` : "";
   doc.open();
   doc.write(
-    `<!DOCTYPE html><html class="${htmlClasses}"><head><meta charset="UTF-8"><base href="${escapeAttribute(document.baseURI)}"></head><body class="${bodyClasses}"><div id="pdf-preview-source"><div class="markdown-preview-view markdown-rendered"><div class="markdown-preview-sizer"><div class="markdown-preview-section">${html}</div></div></div></div></body></html>`
+    `<!DOCTYPE html>
+<html class="${htmlClasses}">
+<head>
+<meta charset="UTF-8">
+<base href="${escapeAttribute(document.baseURI)}">
+</head>
+<body class="${bodyClasses}">
+<div id="pdf-preview-source">
+  <div class="markdown-preview-view markdown-rendered">
+    <div class="markdown-preview-sizer">
+      <div class="markdown-preview-section">
+        ${titleHtml}
+        ${html}
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`
   );
   doc.close();
 }
-async function applyPreviewStyles(doc, app, settings) {
+async function applyPreviewStyles(doc, app, settings, nativeSettings) {
   await appendParentStyles(doc);
   const css = await getLoadedCss(app);
   if (css.trim()) {
@@ -590,7 +606,7 @@ async function applyPreviewStyles(doc, app, settings) {
     doc.head.appendChild(style);
   }
   const previewStyle = doc.createElement("style");
-  previewStyle.textContent = getPreviewCss(settings);
+  previewStyle.textContent = getPreviewCss(settings, nativeSettings);
   doc.head.appendChild(previewStyle);
 }
 async function appendParentStyles(doc) {
@@ -644,95 +660,113 @@ function waitForStylesheet(link) {
       settled = true;
       resolve();
     };
-    link.addEventListener("load", finish, { once: true });
-    link.addEventListener("error", finish, { once: true });
+    link.addEventListener("load", finish, {
+      once: true
+    });
+    link.addEventListener("error", finish, {
+      once: true
+    });
     window.setTimeout(finish, 3e3);
   });
 }
 function escapeAttribute(value) {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-function getPreviewCss(settings) {
+function escapeHtml(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+function getPreviewCss(settings, nativeSettings) {
+  const pageWidth = nativeSettings.landscape ? A4_HEIGHT : A4_WIDTH;
+  const pageHeight = nativeSettings.landscape ? A4_WIDTH : A4_HEIGHT;
+  const padding = nativeSettings.margin === "none" ? 0 : nativeSettings.margin === "minimal" ? 24 : 48;
   return `
 * {
-	box-sizing: border-box;
+  box-sizing: border-box;
 }
+
 html {
-	margin: 0 !important;
-	padding: 0 !important;
-	width: ${A4_WIDTH}px !important;
-	min-width: ${A4_WIDTH}px !important;
-	background: white !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: ${pageWidth}px !important;
+  min-width: ${pageWidth}px !important;
+  background: white !important;
 }
+
 body {
-	margin: 0 !important;
-	padding: 0 !important;
-	width: ${A4_WIDTH}px !important;
-	min-width: ${A4_WIDTH}px !important;
-	background: white !important;
-	overflow: visible !important;
-	font-size: ${settings.fontSize}px !important;
-	--font-text-size: ${settings.fontSize}px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: ${pageWidth}px !important;
+  min-width: ${pageWidth}px !important;
+  background: white !important;
+  overflow: visible !important;
+  font-size: ${settings.fontSize}px !important;
+  --font-text-size: ${settings.fontSize}px !important;
 }
+
 #pdf-preview-source {
-	width: ${A4_WIDTH}px !important;
-	margin: 0 !important;
-	padding: 0 !important;
+  width: ${pageWidth}px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
+
 .pdf-preview-pages {
-	width: ${A4_WIDTH}px !important;
-	margin: 0 !important;
-	padding: 0 !important;
+  width: ${pageWidth}px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
+
 .pdf-preview-page {
-	width: ${A4_WIDTH}px !important;
-	height: ${A4_HEIGHT}px !important;
-	min-height: ${A4_HEIGHT}px !important;
-	max-height: ${A4_HEIGHT}px !important;
-	box-sizing: border-box !important;
-	position: relative !important;
-	overflow: hidden !important;
-	margin: 0 !important;
-	padding: 48px !important;
-	background: white !important;
-	color: black !important;
+  width: ${pageWidth}px !important;
+  height: ${pageHeight}px !important;
+  min-height: ${pageHeight}px !important;
+  max-height: ${pageHeight}px !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: ${padding}px !important;
+  background: white !important;
 }
+
 .pdf-preview-page .markdown-preview-view {
-	width: 100% !important;
-	max-width: none !important;
-	min-width: 0 !important;
-	height: auto !important;
-	min-height: 0 !important;
-	margin: 0 !important;
-	padding: 0 !important;
-	overflow: visible !important;
-	background: transparent !important;
-	font-size: ${settings.fontSize}px !important;
-	--font-text-size: ${settings.fontSize}px !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+  font-size: ${settings.fontSize}px !important;
+  --font-text-size: ${settings.fontSize}px !important;
 }
+
 .pdf-preview-page .markdown-preview-sizer {
-	width: 100% !important;
-	max-width: none !important;
-	min-width: 0 !important;
-	height: auto !important;
-	min-height: 0 !important;
-	margin: 0 !important;
-	padding: 0 !important;
-	overflow: visible !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
 }
+
 .pdf-preview-page .markdown-preview-section {
-	width: 100% !important;
-	max-width: none !important;
-	min-width: 0 !important;
-	height: auto !important;
-	min-height: 0 !important;
-	margin: 0 !important;
-	padding: 0 !important;
-	overflow: visible !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
 }
+
 .pdf-preview-page img {
-	max-width: 100% !important;
-	height: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
 }
 `;
 }
@@ -754,7 +788,7 @@ async function waitForIframeLayout() {
 }
 
 // src/pdf/preview/preview-pagination.ts
-function paginatePreview(doc) {
+function paginatePreview(doc, pageHeight) {
   const sourceSection = doc.querySelector(
     "#pdf-preview-source .markdown-preview-section"
   );
@@ -779,7 +813,7 @@ function paginatePreview(doc) {
       continue;
     }
     section.appendChild(node);
-    if (!fitsPage(currentPage, section) && section.children.length > 1) {
+    if (!fitsPage(currentPage, section, pageHeight) && section.children.length > 1) {
       section.lastElementChild?.remove();
       currentPage = createPage(doc);
       pagesContainer.appendChild(currentPage);
@@ -802,11 +836,11 @@ function paginatePreview(doc) {
   });
   return Math.max(1, pages.length);
 }
-function fitsPage(page, section) {
+function fitsPage(page, section, pageHeight) {
   const pageStyle = getComputedStyle(page);
   const paddingTop = parseFloat(pageStyle.paddingTop) || 0;
   const paddingBottom = parseFloat(pageStyle.paddingBottom) || 0;
-  const availableHeight = A4_HEIGHT - paddingTop - paddingBottom;
+  const availableHeight = pageHeight - paddingTop - paddingBottom;
   const contentHeight = section.scrollHeight;
   return contentHeight <= availableHeight + 1;
 }
@@ -900,16 +934,18 @@ var PdfPreview = class {
   app;
   settings;
   container;
+  nativeSettings;
   header;
   navigation;
   viewport;
   iframe = null;
   currentPage = 0;
   pageCount = 1;
-  constructor(app, settings, container) {
+  constructor(app, settings, container, nativeSettings) {
     this.app = app;
     this.settings = settings;
     this.container = container;
+    this.nativeSettings = nativeSettings;
     this.header = document.createElement("div");
     this.header.className = "pdf-export-preview-header";
     this.navigation = document.createElement("div");
@@ -920,6 +956,9 @@ var PdfPreview = class {
     this.container.appendChild(this.navigation);
     this.container.appendChild(this.viewport);
     this.header.textContent = this.getPreviewTitle();
+  }
+  setNativeSettings(settings) {
+    this.nativeSettings = settings;
   }
   async refresh() {
     const view = this.app.workspace.getActiveViewOfType(import_obsidian5.MarkdownView);
@@ -948,9 +987,9 @@ var PdfPreview = class {
       );
       return;
     }
-    await this.createIframe(html);
+    await this.createIframe(html, source.sourcePath);
   }
-  async createIframe(html) {
+  async createIframe(html, sourcePath) {
     this.viewport.empty();
     this.iframe = null;
     const iframe = document.createElement("iframe");
@@ -966,15 +1005,17 @@ var PdfPreview = class {
       );
       return;
     }
+    const fileName = sourcePath.split("/").pop()?.replace(/\.md$/i, "") ?? "";
     writePreviewDocument(
       doc,
       html,
       this.escapeHtml(document.documentElement.className),
-      this.escapeHtml(document.body.className)
+      this.escapeHtml(document.body.className),
+      this.nativeSettings.includeFileName ? fileName : ""
     );
-    await applyPreviewStyles(doc, this.app, this.settings);
+    await applyPreviewStyles(doc, this.app, this.settings, this.nativeSettings);
     await waitForIframeResources(doc);
-    this.pageCount = paginatePreview(doc);
+    this.pageCount = paginatePreview(doc, this.getPageHeight());
     this.updateHeader();
     this.renderNavigation();
     this.showPage();
@@ -1034,12 +1075,16 @@ var PdfPreview = class {
     if (viewportWidth <= 0 || viewportHeight <= 0) {
       return;
     }
+    const pageWidth = this.getPageWidth();
+    const pageHeight = this.getPageHeight();
     const scale = Math.min(
-      viewportWidth / A4_WIDTH,
-      viewportHeight / A4_HEIGHT
+      viewportWidth / pageWidth,
+      viewportHeight / pageHeight
     );
-    const width = A4_WIDTH * scale;
+    const width = pageWidth * scale;
+    const height = pageHeight * scale;
     const left = (viewportWidth - width) / 2;
+    const top = (viewportHeight - height) / 2;
     const doc = this.iframe.contentDocument;
     if (!doc) {
       return;
@@ -1054,15 +1099,21 @@ var PdfPreview = class {
         "important"
       );
     });
-    this.iframe.style.width = `${A4_WIDTH}px`;
-    this.iframe.style.height = `${A4_HEIGHT}px`;
+    this.iframe.style.width = `${pageWidth}px`;
+    this.iframe.style.height = `${pageHeight}px`;
     this.iframe.style.left = `${left}px`;
-    this.iframe.style.top = "0";
+    this.iframe.style.top = `${top}px`;
     this.iframe.style.transform = `scale(${scale})`;
     this.iframe.style.transformOrigin = "top left";
     doc.documentElement.style.overflow = "hidden";
     doc.body.style.overflow = "hidden";
     this.updateNavigation();
+  }
+  getPageWidth() {
+    return this.nativeSettings.landscape ? A4_HEIGHT : A4_WIDTH;
+  }
+  getPageHeight() {
+    return this.nativeSettings.landscape ? A4_WIDTH : A4_HEIGHT;
   }
   showError(message) {
     this.iframe = null;
@@ -1093,10 +1144,10 @@ var PdfPreview = class {
     return count === 1 ? "page" : "pages";
   }
   setHeight(height) {
-    this.viewport.style.height = `${height}px`;
-    const width = height * A4_WIDTH / A4_HEIGHT;
-    this.viewport.style.width = `${width}px`;
-    this.viewport.style.maxWidth = "100%";
+    const availableWidth = this.container.clientWidth;
+    const size = availableWidth > 0 ? Math.min(height, availableWidth) : height;
+    this.viewport.style.width = `${size}px`;
+    this.viewport.style.height = `${size}px`;
     requestAnimationFrame(() => {
       this.showPage();
     });
@@ -1107,155 +1158,311 @@ var PdfPreview = class {
   }
 };
 
-// src/pdf/pdf-modal.ts
+// src/pdf/modal/pdf-modal-settings.ts
+async function loadNativePdfSettings(app) {
+  try {
+    const raw = await app.vault.adapter.read(".obsidian/app.json");
+    const config = JSON.parse(raw);
+    const settings = config.pdfExportSettings;
+    if (!settings) {
+      return null;
+    }
+    return {
+      includeFileName: settings.includeName ?? false,
+      landscape: settings.landscape ?? false,
+      margin: parseNativePdfMargin(settings.margin)
+    };
+  } catch {
+    return null;
+  }
+}
+function parseNativePdfMargin(value) {
+  if (value === "2") {
+    return "minimal";
+  }
+  if (value === "1") {
+    return "none";
+  }
+  return "default";
+}
+
+// src/pdf/modal/pdf-modal-ui.ts
+var import_obsidian6 = require("obsidian");
+function configurePdfModalSize(modal) {
+  const modalEl = modal;
+  modalEl.style.setProperty("width", "760px", "important");
+  modalEl.style.setProperty("max-width", "90vw", "important");
+  modalEl.style.setProperty("min-width", "0", "important");
+  modalEl.style.setProperty("height", "80vh", "important");
+  modalEl.style.setProperty("max-height", "80vh", "important");
+  modalEl.style.setProperty("min-height", "0", "important");
+}
+function createPdfLayout(modal) {
+  const content = modal.querySelector(".modal-content");
+  if (!content) {
+    return null;
+  }
+  const layout = document.createElement("div");
+  layout.className = "pdf-export-layout";
+  const left = document.createElement("div");
+  left.className = "pdf-export-settings-left";
+  const right = document.createElement("div");
+  right.className = "pdf-export-preview-right";
+  const children = Array.from(content.children);
+  children.forEach((child) => {
+    left.appendChild(child);
+  });
+  layout.appendChild(left);
+  layout.appendChild(right);
+  content.appendChild(layout);
+  return {
+    left,
+    right
+  };
+}
+function createFontSetting(container, settings, saveSettings, preview) {
+  const isRussian = (0, import_obsidian6.getLanguage)() === "ru";
+  const wrapper = document.createElement("div");
+  wrapper.className = "pdf-export-font-size-setting";
+  new import_obsidian6.Setting(wrapper).setName(isRussian ? "\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430" : "Text size").setDesc(
+    isRussian ? "\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF" : "Text size used when exporting to PDF"
+  ).addText((text) => {
+    text.inputEl.type = "number";
+    text.inputEl.step = "0.5";
+    text.inputEl.min = "1";
+    text.setValue(String(settings.fontSize));
+    text.onChange(async (value) => {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return;
+      }
+      settings.fontSize = parsed;
+      await saveSettings();
+      await preview?.refresh();
+    });
+    text.inputEl.style.width = "90px";
+  });
+  container.appendChild(wrapper);
+}
+function forceA4(modal) {
+  const settings = Array.from(modal.querySelectorAll(".setting-item"));
+  const pageSetting = settings.find((setting) => {
+    const select2 = setting.querySelector("select");
+    if (!select2) {
+      return false;
+    }
+    return Array.from(select2.options).some(
+      (option) => option.textContent?.trim().toLowerCase() === "a4"
+    );
+  });
+  if (!pageSetting) {
+    return;
+  }
+  const select = pageSetting.querySelector(
+    "select"
+  );
+  if (select) {
+    const a4 = Array.from(select.options).find(
+      (option) => option.textContent?.trim().toLowerCase() === "a4"
+    );
+    if (a4) {
+      select.value = a4.value;
+      select.dispatchEvent(
+        new Event("change", {
+          bubbles: true
+        })
+      );
+    }
+  }
+  pageSetting.style.display = "none";
+}
+function hideScaleSetting(modal) {
+  const settings = Array.from(modal.querySelectorAll(".setting-item"));
+  const scaleSetting = settings.find(
+    (setting) => setting.querySelector('input[type="range"]')
+  );
+  if (!scaleSetting) {
+    return;
+  }
+  scaleSetting.style.display = "none";
+}
+function setPreviewHeight(preview) {
+  preview?.setHeight(540);
+}
+
+// src/pdf/modal/pdf-modal.ts
 var PdfModal = class {
   app;
   plugin;
   observer = null;
   preview = null;
+  nativePdfSettings = null;
+  setupInProgress = false;
   constructor(app, plugin) {
     this.app = app;
     this.plugin = plugin;
   }
   start() {
     this.observer = new MutationObserver(() => {
-      this.trySetup();
+      void this.trySetup();
     });
     this.observer.observe(document.body, {
       childList: true,
       subtree: true
     });
-    this.trySetup();
+    void this.trySetup();
   }
-  trySetup() {
+  async trySetup() {
     if (document.querySelector(".pdf-export-layout")) {
       return;
     }
+    if (this.setupInProgress) {
+      return;
+    }
     const modals = Array.from(document.querySelectorAll(".modal"));
-    const modal = modals.find((element) => {
-      const hasPageSize = Array.from(element.querySelectorAll("select")).some(
-        (select) => Array.from(select.options).some(
-          (option) => option.textContent?.trim().toLowerCase() === "a4"
-        )
-      );
-      const text = element.textContent?.toLowerCase() ?? "";
-      const hasExportText = text.includes("export to pdf") || text.includes("\u044D\u043A\u0441\u043F\u043E\u0440\u0442 \u0432 pdf");
-      return hasPageSize || hasExportText;
-    });
+    const modal = modals.find((element) => this.isPdfModal(element));
     if (!modal) {
       return;
     }
-    this.setup(modal);
+    this.setupInProgress = true;
+    try {
+      this.nativePdfSettings = await loadNativePdfSettings(this.app);
+      if (!this.nativePdfSettings) {
+        return;
+      }
+      this.applyNativeSettingsToModal(modal);
+      this.setup(modal);
+    } finally {
+      this.setupInProgress = false;
+    }
+  }
+  isPdfModal(modal) {
+    const selects = Array.from(
+      modal.querySelectorAll("select")
+    );
+    const hasA4Select = selects.some(
+      (select) => Array.from(select.options).some(
+        (option) => option.textContent?.trim().toLowerCase() === "a4"
+      )
+    );
+    const checkboxes = modal.querySelectorAll('input[type="checkbox"]');
+    const hasTwoCheckboxes = checkboxes.length >= 2;
+    const hasMarginSelect = selects.some(
+      (select) => !Array.from(select.options).some(
+        (option) => option.textContent?.trim().toLowerCase() === "a4"
+      )
+    );
+    const hasScale = !!modal.querySelector('input[type="range"]');
+    return hasA4Select && hasTwoCheckboxes && hasMarginSelect && hasScale;
+  }
+  applyNativeSettingsToModal(modal) {
+    if (!this.nativePdfSettings) {
+      return;
+    }
+    const checkboxes = Array.from(
+      modal.querySelectorAll('input[type="checkbox"]')
+    );
+    const selects = Array.from(
+      modal.querySelectorAll("select")
+    );
+    const fileNameCheckbox = checkboxes[0];
+    const landscapeCheckbox = checkboxes[1];
+    const marginSelect = selects.find(
+      (select) => !Array.from(select.options).some(
+        (option) => option.textContent?.trim().toLowerCase() === "a4"
+      )
+    );
+    if (fileNameCheckbox) {
+      fileNameCheckbox.checked = this.nativePdfSettings.includeFileName;
+    }
+    if (landscapeCheckbox) {
+      landscapeCheckbox.checked = this.nativePdfSettings.landscape;
+    }
+    if (marginSelect) {
+      marginSelect.value = this.getNativeMarginValue(
+        this.nativePdfSettings.margin
+      );
+    }
+  }
+  getNativeMarginValue(margin) {
+    if (margin === "minimal") {
+      return "2";
+    }
+    if (margin === "none") {
+      return "1";
+    }
+    return "0";
   }
   setup(modal) {
-    const content = modal.querySelector(".modal-content");
-    if (!content) {
+    if (!this.nativePdfSettings) {
       return;
     }
-    const modalEl = modal;
-    modalEl.style.setProperty("width", "760px", "important");
-    modalEl.style.setProperty("max-width", "90vw", "important");
-    modalEl.style.setProperty("min-width", "0", "important");
-    modalEl.style.setProperty("height", "80vh", "important");
-    modalEl.style.setProperty("max-height", "80vh", "important");
-    modalEl.style.setProperty("min-height", "0", "important");
-    this.forceA4(modal);
-    this.hideScaleSetting(modal);
-    const layout = document.createElement("div");
-    layout.className = "pdf-export-layout";
-    const left = document.createElement("div");
-    left.className = "pdf-export-settings-left";
-    const right = document.createElement("div");
-    right.className = "pdf-export-preview-right";
-    const children = Array.from(content.children);
-    children.forEach((child) => {
-      left.appendChild(child);
-    });
-    layout.appendChild(left);
-    layout.appendChild(right);
-    content.appendChild(layout);
-    this.createFontSetting(left);
-    this.preview = new PdfPreview(this.app, this.plugin.pdfSettings, right);
+    configurePdfModalSize(modal);
+    forceA4(modal);
+    hideScaleSetting(modal);
+    const layout = createPdfLayout(modal);
+    if (!layout) {
+      return;
+    }
+    this.preview = new PdfPreview(
+      this.app,
+      this.plugin.pdfSettings,
+      layout.right,
+      this.nativePdfSettings
+    );
+    createFontSetting(
+      layout.left,
+      this.plugin.pdfSettings,
+      () => this.plugin.saveSettings(),
+      this.preview
+    );
+    this.bindNativeSettings(modal);
     requestAnimationFrame(() => {
-      this.fitPreviewHeight();
-      this.preview?.refresh();
+      setPreviewHeight(this.preview);
+      void this.preview?.refresh();
     });
   }
-  createFontSetting(container) {
-    const isRussian = (0, import_obsidian6.getLanguage)() === "ru";
-    const wrapper = document.createElement("div");
-    wrapper.className = "pdf-export-font-size-setting";
-    new import_obsidian6.Setting(wrapper).setName(isRussian ? "\u0420\u0430\u0437\u043C\u0435\u0440 \u0448\u0440\u0438\u0444\u0442\u0430" : "Text size").setDesc(
-      isRussian ? "\u0420\u0430\u0437\u043C\u0435\u0440 \u0442\u0435\u043A\u0441\u0442\u0430 \u043F\u0440\u0438 \u044D\u043A\u0441\u043F\u043E\u0440\u0442\u0435 \u0432 PDF" : "Text size used when exporting to PDF"
-    ).addText((text) => {
-      text.inputEl.type = "number";
-      text.inputEl.step = "0.5";
-      text.inputEl.min = "1";
-      text.setValue(String(this.plugin.pdfSettings.fontSize));
-      text.onChange(async (value) => {
-        const parsed = Number(value);
-        if (!Number.isFinite(parsed) || parsed <= 0) {
-          return;
-        }
-        this.plugin.pdfSettings.fontSize = parsed;
-        await this.plugin.saveSettings();
-      });
-      text.inputEl.style.width = "90px";
-    });
-    container.appendChild(wrapper);
-  }
-  fitPreviewHeight() {
-    if (!this.preview) {
-      return;
-    }
-    this.preview.setHeight(540);
-  }
-  forceA4(modal) {
-    const settings = Array.from(modal.querySelectorAll(".setting-item"));
-    const pageSetting = settings.find((setting) => {
-      const select2 = setting.querySelector(
-        "select"
-      );
-      if (!select2) {
-        return false;
-      }
-      return Array.from(select2.options).some(
-        (option) => option.textContent?.trim().toLowerCase() === "a4"
-      );
-    });
-    if (!pageSetting) {
-      return;
-    }
-    const select = pageSetting.querySelector(
-      "select"
+  bindNativeSettings(modal) {
+    const checkboxes = Array.from(
+      modal.querySelectorAll('input[type="checkbox"]')
     );
-    if (select) {
-      const a4 = Array.from(select.options).find(
-        (option) => option.textContent?.trim().toLowerCase() === "a4"
-      );
-      if (a4) {
-        select.value = a4.value;
-        select.dispatchEvent(
-          new Event("change", {
-            bubbles: true
-          })
-        );
-      }
-    }
-    pageSetting.style.display = "none";
-  }
-  hideScaleSetting(modal) {
-    const settings = Array.from(modal.querySelectorAll(".setting-item"));
-    const scaleSetting = settings.find(
-      (setting) => setting.querySelector('input[type="range"]')
+    const selects = Array.from(
+      modal.querySelectorAll("select")
     );
-    if (!scaleSetting) {
-      return;
-    }
-    scaleSetting.style.display = "none";
+    const fileNameCheckbox = checkboxes[0];
+    const landscapeCheckbox = checkboxes[1];
+    const marginSelect = selects.find(
+      (select) => !Array.from(select.options).some(
+        (option) => option.textContent?.trim().toLowerCase() === "a4"
+      )
+    );
+    fileNameCheckbox?.addEventListener("change", () => {
+      if (!this.nativePdfSettings) {
+        return;
+      }
+      this.nativePdfSettings.includeFileName = fileNameCheckbox.checked;
+      this.preview?.setNativeSettings(this.nativePdfSettings);
+      void this.preview?.refresh();
+    });
+    landscapeCheckbox?.addEventListener("change", () => {
+      if (!this.nativePdfSettings) {
+        return;
+      }
+      this.nativePdfSettings.landscape = landscapeCheckbox.checked;
+      this.preview?.setNativeSettings(this.nativePdfSettings);
+      void this.preview?.refresh();
+    });
+    marginSelect?.addEventListener("change", () => {
+      if (!this.nativePdfSettings) {
+        return;
+      }
+      this.nativePdfSettings.margin = parseNativePdfMargin(marginSelect.value);
+      this.preview?.setNativeSettings(this.nativePdfSettings);
+      void this.preview?.refresh();
+    });
   }
   refresh() {
-    this.preview?.refresh();
+    void this.preview?.refresh();
   }
   createSettingTab() {
     return new PdfExportSettingTab(this.app, this.plugin);
@@ -1265,6 +1472,8 @@ var PdfModal = class {
     this.observer = null;
     this.preview?.destroy();
     this.preview = null;
+    this.nativePdfSettings = null;
+    this.setupInProgress = false;
     document.querySelector(".pdf-export-layout")?.remove();
   }
 };

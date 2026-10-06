@@ -1,6 +1,6 @@
 import { Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, PdfExportSettings } from "./settings/settings";
-import { PdfModal } from "./pdf/pdf-modal";
+import { PdfModal } from "./pdf/modal/pdf-modal";
 import { PdfExportSettingTab } from "./settings/settings-tab";
 import styles from "./styles/styles.css";
 export default class PdfExportPlugin extends Plugin {

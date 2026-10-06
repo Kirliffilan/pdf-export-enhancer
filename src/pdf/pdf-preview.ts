@@ -2,6 +2,7 @@ import { App, MarkdownView, getLanguage } from "obsidian";
 import type { PdfExportSettings } from "../settings/settings";
 import { getMarkdownSource } from "./pdf-source";
 import { A4_WIDTH, A4_HEIGHT } from "./pagination";
+import type { NativePdfSettings } from "./pdf-settings";
 import { renderMarkdown } from "./preview/preview-renderer";
 import {
   applyPreviewStyles,
@@ -18,6 +19,7 @@ export class PdfPreview {
   private app: App;
   private settings: PdfExportSettings;
   private container: HTMLElement;
+  private nativeSettings: NativePdfSettings;
   private header: HTMLElement;
   private navigation: HTMLElement;
   private viewport: HTMLElement;
@@ -25,25 +27,30 @@ export class PdfPreview {
   private currentPage = 0;
   private pageCount = 1;
 
-  constructor(app: App, settings: PdfExportSettings, container: HTMLElement) {
+  constructor(
+    app: App,
+    settings: PdfExportSettings,
+    container: HTMLElement,
+    nativeSettings: NativePdfSettings,
+  ) {
     this.app = app;
     this.settings = settings;
     this.container = container;
-
+    this.nativeSettings = nativeSettings;
     this.header = document.createElement("div");
     this.header.className = "pdf-export-preview-header";
-
     this.navigation = document.createElement("div");
     this.navigation.className = "pdf-export-preview-navigation";
-
     this.viewport = document.createElement("div");
     this.viewport.className = "pdf-export-preview-viewport";
-
     this.container.appendChild(this.header);
     this.container.appendChild(this.navigation);
     this.container.appendChild(this.viewport);
-
     this.header.textContent = this.getPreviewTitle();
+  }
+
+  setNativeSettings(settings: NativePdfSettings) {
+    this.nativeSettings = settings;
   }
 
   async refresh() {
@@ -85,19 +92,18 @@ export class PdfPreview {
       );
       return;
     }
-    await this.createIframe(html);
+
+    await this.createIframe(html, source.sourcePath);
   }
 
-  private async createIframe(html: string) {
+  private async createIframe(html: string, sourcePath: string) {
     this.viewport.empty();
     this.iframe = null;
 
     const iframe = document.createElement("iframe");
-
     iframe.className = "pdf-export-preview-iframe";
     iframe.setAttribute("frameborder", "0");
     iframe.setAttribute("scrolling", "no");
-
     this.viewport.appendChild(iframe);
     this.iframe = iframe;
 
@@ -112,16 +118,22 @@ export class PdfPreview {
       return;
     }
 
+    const fileName = sourcePath.split("/").pop()?.replace(/\.md$/i, "") ?? "";
+
     writePreviewDocument(
       doc,
       html,
       this.escapeHtml(document.documentElement.className),
       this.escapeHtml(document.body.className),
+      this.nativeSettings.includeFileName ? fileName : "",
     );
 
-    await applyPreviewStyles(doc, this.app, this.settings);
+    await applyPreviewStyles(doc, this.app, this.settings, this.nativeSettings);
+
     await waitForIframeResources(doc);
-    this.pageCount = paginatePreview(doc);
+
+    this.pageCount = paginatePreview(doc, this.getPageHeight());
+
     this.updateHeader();
     this.renderNavigation();
     this.showPage();
@@ -180,6 +192,7 @@ export class PdfPreview {
     }
 
     page = Math.max(1, Math.min(page, this.pageCount));
+
     this.currentPage = page - 1;
     this.updateNavigation();
     this.showPage();
@@ -197,14 +210,21 @@ export class PdfPreview {
       return;
     }
 
+    const pageWidth = this.getPageWidth();
+    const pageHeight = this.getPageHeight();
+
     const scale = Math.min(
-      viewportWidth / A4_WIDTH,
-      viewportHeight / A4_HEIGHT,
+      viewportWidth / pageWidth,
+      viewportHeight / pageHeight,
     );
 
-    const width = A4_WIDTH * scale;
+    const width = pageWidth * scale;
+    const height = pageHeight * scale;
     const left = (viewportWidth - width) / 2;
+    const top = (viewportHeight - height) / 2;
+
     const doc = this.iframe.contentDocument;
+
     if (!doc) {
       return;
     }
@@ -221,28 +241,37 @@ export class PdfPreview {
       );
     });
 
-    this.iframe.style.width = `${A4_WIDTH}px`;
-    this.iframe.style.height = `${A4_HEIGHT}px`;
+    this.iframe.style.width = `${pageWidth}px`;
+    this.iframe.style.height = `${pageHeight}px`;
     this.iframe.style.left = `${left}px`;
-    this.iframe.style.top = "0";
+    this.iframe.style.top = `${top}px`;
     this.iframe.style.transform = `scale(${scale})`;
     this.iframe.style.transformOrigin = "top left";
+
     doc.documentElement.style.overflow = "hidden";
     doc.body.style.overflow = "hidden";
+
     this.updateNavigation();
+  }
+
+  private getPageWidth(): number {
+    return this.nativeSettings.landscape ? A4_HEIGHT : A4_WIDTH;
+  }
+
+  private getPageHeight(): number {
+    return this.nativeSettings.landscape ? A4_WIDTH : A4_HEIGHT;
   }
 
   private showError(message: string) {
     this.iframe = null;
-
     this.header.textContent = this.getPreviewTitle();
-
     this.navigation.empty();
     this.viewport.empty();
 
     const error = document.createElement("div");
     error.className = "pdf-export-preview-error";
     error.textContent = message;
+
     this.viewport.appendChild(error);
   }
 
@@ -280,10 +309,12 @@ export class PdfPreview {
   }
 
   setHeight(height: number) {
-    this.viewport.style.height = `${height}px`;
-    const width = (height * A4_WIDTH) / A4_HEIGHT;
-    this.viewport.style.width = `${width}px`;
-    this.viewport.style.maxWidth = "100%";
+    const availableWidth = this.container.clientWidth;
+    const size = availableWidth > 0 ? Math.min(height, availableWidth) : height;
+
+    this.viewport.style.width = `${size}px`;
+    this.viewport.style.height = `${size}px`;
+
     requestAnimationFrame(() => {
       this.showPage();
     });

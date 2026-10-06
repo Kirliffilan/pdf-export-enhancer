@@ -2,17 +2,39 @@ import { App } from "obsidian";
 import type { PdfExportSettings } from "../../settings/settings";
 import { getLoadedCss } from "../print-css";
 import { A4_WIDTH, A4_HEIGHT } from "../pagination";
+import type { NativePdfSettings } from "../pdf-settings";
 
 export function writePreviewDocument(
   doc: Document,
   html: string,
   htmlClasses: string,
   bodyClasses: string,
+  fileName: string = "",
 ) {
+  const titleHtml = fileName ? `<h1>${escapeHtml(fileName)}</h1>` : "";
+
   doc.open();
 
   doc.write(
-    `<!DOCTYPE html><html class="${htmlClasses}"><head><meta charset="UTF-8"><base href="${escapeAttribute(document.baseURI)}"></head><body class="${bodyClasses}"><div id="pdf-preview-source"><div class="markdown-preview-view markdown-rendered"><div class="markdown-preview-sizer"><div class="markdown-preview-section">${html}</div></div></div></div></body></html>`,
+    `<!DOCTYPE html>
+<html class="${htmlClasses}">
+<head>
+<meta charset="UTF-8">
+<base href="${escapeAttribute(document.baseURI)}">
+</head>
+<body class="${bodyClasses}">
+<div id="pdf-preview-source">
+  <div class="markdown-preview-view markdown-rendered">
+    <div class="markdown-preview-sizer">
+      <div class="markdown-preview-section">
+        ${titleHtml}
+        ${html}
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`,
   );
 
   doc.close();
@@ -22,6 +44,7 @@ export async function applyPreviewStyles(
   doc: Document,
   app: App,
   settings: PdfExportSettings,
+  nativeSettings: NativePdfSettings,
 ) {
   await appendParentStyles(doc);
 
@@ -34,7 +57,7 @@ export async function applyPreviewStyles(
   }
 
   const previewStyle = doc.createElement("style");
-  previewStyle.textContent = getPreviewCss(settings);
+  previewStyle.textContent = getPreviewCss(settings, nativeSettings);
   doc.head.appendChild(previewStyle);
 }
 
@@ -70,9 +93,7 @@ async function appendParentStyles(doc: Document) {
       }
 
       const style = doc.createElement("style");
-
       style.textContent = node.textContent || "";
-
       doc.head.appendChild(style);
     }
   }
@@ -110,9 +131,13 @@ function waitForStylesheet(link: HTMLLinkElement): Promise<void> {
       resolve();
     };
 
-    link.addEventListener("load", finish, { once: true });
+    link.addEventListener("load", finish, {
+      once: true,
+    });
 
-    link.addEventListener("error", finish, { once: true });
+    link.addEventListener("error", finish, {
+      once: true,
+    });
 
     window.setTimeout(finish, 3000);
   });
@@ -126,87 +151,118 @@ function escapeAttribute(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-function getPreviewCss(settings: PdfExportSettings): string {
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getPreviewCss(
+  settings: PdfExportSettings,
+  nativeSettings: NativePdfSettings,
+): string {
+  const pageWidth = nativeSettings.landscape ? A4_HEIGHT : A4_WIDTH;
+
+  const pageHeight = nativeSettings.landscape ? A4_WIDTH : A4_HEIGHT;
+
+  const padding =
+    nativeSettings.margin === "none"
+      ? 0
+      : nativeSettings.margin === "minimal"
+        ? 24
+        : 48;
+
   return `
 * {
-	box-sizing: border-box;
+  box-sizing: border-box;
 }
+
 html {
-	margin: 0 !important;
-	padding: 0 !important;
-	width: ${A4_WIDTH}px !important;
-	min-width: ${A4_WIDTH}px !important;
-	background: white !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: ${pageWidth}px !important;
+  min-width: ${pageWidth}px !important;
+  background: white !important;
 }
+
 body {
-	margin: 0 !important;
-	padding: 0 !important;
-	width: ${A4_WIDTH}px !important;
-	min-width: ${A4_WIDTH}px !important;
-	background: white !important;
-	overflow: visible !important;
-	font-size: ${settings.fontSize}px !important;
-	--font-text-size: ${settings.fontSize}px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: ${pageWidth}px !important;
+  min-width: ${pageWidth}px !important;
+  background: white !important;
+  overflow: visible !important;
+  font-size: ${settings.fontSize}px !important;
+  --font-text-size: ${settings.fontSize}px !important;
 }
+
 #pdf-preview-source {
-	width: ${A4_WIDTH}px !important;
-	margin: 0 !important;
-	padding: 0 !important;
+  width: ${pageWidth}px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
+
 .pdf-preview-pages {
-	width: ${A4_WIDTH}px !important;
-	margin: 0 !important;
-	padding: 0 !important;
+  width: ${pageWidth}px !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
+
 .pdf-preview-page {
-	width: ${A4_WIDTH}px !important;
-	height: ${A4_HEIGHT}px !important;
-	min-height: ${A4_HEIGHT}px !important;
-	max-height: ${A4_HEIGHT}px !important;
-	box-sizing: border-box !important;
-	position: relative !important;
-	overflow: hidden !important;
-	margin: 0 !important;
-	padding: 48px !important;
-	background: white !important;
-	color: black !important;
+  width: ${pageWidth}px !important;
+  height: ${pageHeight}px !important;
+  min-height: ${pageHeight}px !important;
+  max-height: ${pageHeight}px !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: ${padding}px !important;
+  background: white !important;
 }
+
 .pdf-preview-page .markdown-preview-view {
-	width: 100% !important;
-	max-width: none !important;
-	min-width: 0 !important;
-	height: auto !important;
-	min-height: 0 !important;
-	margin: 0 !important;
-	padding: 0 !important;
-	overflow: visible !important;
-	background: transparent !important;
-	font-size: ${settings.fontSize}px !important;
-	--font-text-size: ${settings.fontSize}px !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+  font-size: ${settings.fontSize}px !important;
+  --font-text-size: ${settings.fontSize}px !important;
 }
+
 .pdf-preview-page .markdown-preview-sizer {
-	width: 100% !important;
-	max-width: none !important;
-	min-width: 0 !important;
-	height: auto !important;
-	min-height: 0 !important;
-	margin: 0 !important;
-	padding: 0 !important;
-	overflow: visible !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
 }
+
 .pdf-preview-page .markdown-preview-section {
-	width: 100% !important;
-	max-width: none !important;
-	min-width: 0 !important;
-	height: auto !important;
-	min-height: 0 !important;
-	margin: 0 !important;
-	padding: 0 !important;
-	overflow: visible !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
 }
+
 .pdf-preview-page img {
-	max-width: 100% !important;
-	height: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
 }
 `;
 }
