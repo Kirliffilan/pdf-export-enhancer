@@ -5,5 +5,6 @@
   "description": "Enhance PDF export with customizable text size, an A4 page preview, page navigation, and support for themes, Style Settings, and CSS snippets.",
   "author": "Kirliffilan",
   "authorUrl": "https://github.com/Kirliffilan",
-  "isDesktopOnly": true
+  "isDesktopOnly": true,
+  "version": "2.0.0"
 }
