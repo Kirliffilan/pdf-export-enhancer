@@ -13,6 +13,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,52 +26,99 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Set version from tag
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME}"
+
+          node <<'EOF'
+          const fs = require("fs");
+
+          for (const path of ["manifest.json", "package.json"]) {
+            const data = JSON.parse(
+              fs.readFileSync(path, "utf8")
+            );
+
+            data.version = process.env.TAG_VERSION;
+
+            fs.writeFileSync(
+              path,
+              JSON.stringify(data, null, 2) + "\n"
+            );
+          }
+          EOF
+
+          echo "Version set to ${TAG_VERSION}"
+
+          echo "manifest.json:"
+          node -p "require('./manifest.json').version"
+
+          echo "package.json:"
+          node -p "require('./package.json').version"
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify version
+      - name: Build
+        run: npm run build
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release-artifacts
+          cp main.js release-artifacts/main.js
+          cp manifest.json release-artifacts/manifest.json
+
+      - name: Update repository versions
         run: |
           TAG_VERSION="${GITHUB_REF_NAME}"
-          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
-          MIN_APP_VERSION=$(node -p "require('./manifest.json').minAppVersion")
 
-          echo "Tag version: $TAG_VERSION"
-          echo "Manifest version: $MANIFEST_VERSION"
-          echo "Min app version: $MIN_APP_VERSION"
-
-          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
-            echo "Version mismatch!"
-            exit 1
-          fi
-
-          echo "TAG_VERSION=$TAG_VERSION" >> "$GITHUB_ENV"
-          echo "MIN_APP_VERSION=$MIN_APP_VERSION" >> "$GITHUB_ENV"
-
-      - name: Update versions.json
-        run: |
           git fetch origin "${{ github.event.repository.default_branch }}"
           git checkout --detach "origin/${{ github.event.repository.default_branch }}"
 
           node <<'EOF'
           const fs = require("fs");
 
-          const path = "versions.json";
-          let versions = {};
+          const manifestPath = "manifest.json";
+          const packagePath = "package.json";
+          const versionsPath = "versions.json";
 
-          if (fs.existsSync(path)) {
-            versions = JSON.parse(fs.readFileSync(path, "utf8"));
+          for (const path of [manifestPath, packagePath]) {
+            const data = JSON.parse(
+              fs.readFileSync(path, "utf8")
+            );
+
+            data.version = process.env.TAG_VERSION;
+
+            fs.writeFileSync(
+              path,
+              JSON.stringify(data, null, 2) + "\n"
+            );
           }
 
-          versions[process.env.TAG_VERSION] = process.env.MIN_APP_VERSION;
+          const manifest = JSON.parse(
+            fs.readFileSync(manifestPath, "utf8")
+          );
+
+          let versions = {};
+
+          if (fs.existsSync(versionsPath)) {
+            versions = JSON.parse(
+              fs.readFileSync(versionsPath, "utf8")
+            );
+          }
+
+          versions[process.env.TAG_VERSION] =
+            manifest.minAppVersion;
 
           const sortedVersions = Object.fromEntries(
             Object.entries(versions).sort((a, b) =>
-              b[0].localeCompare(a[0], undefined, { numeric: true })
+              b[0].localeCompare(a[0], undefined, {
+                numeric: true
+              })
             )
           );
 
           fs.writeFileSync(
-            path,
+            versionsPath,
             JSON.stringify(sortedVersions, null, 2) + "\n"
           );
           EOF
@@ -78,22 +126,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add versions.json
+          git add manifest.json package.json versions.json
 
           if git diff --cached --quiet; then
-            echo "versions.json is already up to date."
+            echo "Version files are already up to date."
           else
-            git commit -m "chore: add version ${TAG_VERSION} to versions.json"
+            git commit -m "chore: release ${TAG_VERSION}"
             git push origin "HEAD:${{ github.event.repository.default_branch }}"
           fi
-
-      - name: Build
-        run: npm run build
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: main.js
+          subject-path: release-artifacts/main.js
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -102,5 +147,5 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            main.js
-            manifest.json
+            release-artifacts/main.js
+            release-artifacts/manifest.json
