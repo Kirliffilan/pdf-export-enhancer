@@ -57,7 +57,9 @@ export async function applyPreviewStyles(
   }
 
   const previewStyle = doc.createElement("style");
+
   previewStyle.textContent = getPreviewCss(settings, nativeSettings);
+
   doc.head.appendChild(previewStyle);
 }
 
@@ -84,6 +86,7 @@ async function appendParentStyles(doc: Document) {
 
       doc.head.appendChild(link);
       stylesheetLinks.push(link);
+
       continue;
     }
 
@@ -160,6 +163,10 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#039;");
 }
 
+function mmToPx(value: number): number {
+  return value * (96 / 25.4);
+}
+
 function getPreviewCss(
   settings: PdfExportSettings,
   nativeSettings: NativePdfSettings,
@@ -168,16 +175,21 @@ function getPreviewCss(
 
   const pageHeight = nativeSettings.landscape ? A4_WIDTH : A4_HEIGHT;
 
-  const padding =
-    nativeSettings.margin === "none"
-      ? 0
-      : nativeSettings.margin === "minimal"
-        ? 14
-        : 38;
+  const marginTop = mmToPx(settings.marginTop);
+  const marginBottom = mmToPx(settings.marginBottom);
+  const marginLeft = mmToPx(settings.marginLeft);
+  const marginRight = mmToPx(settings.marginRight);
+
+  const orientation = nativeSettings.landscape ? "landscape" : "portrait";
 
   return `
 * {
   box-sizing: border-box;
+}
+
+@page {
+  size: A4 ${orientation};
+  margin: 0;
 }
 
 html {
@@ -216,11 +228,19 @@ body {
   height: ${pageHeight}px !important;
   min-height: ${pageHeight}px !important;
   max-height: ${pageHeight}px !important;
+
   box-sizing: border-box !important;
   position: relative !important;
   overflow: hidden !important;
+
   margin: 0 !important;
-  padding: ${padding}px !important;
+
+  padding:
+    ${marginTop}px
+    ${marginRight}px
+    ${marginBottom}px
+    ${marginLeft}px !important;
+
   background: white !important;
 }
 
@@ -228,12 +248,16 @@ body {
   width: 100% !important;
   max-width: none !important;
   min-width: 0 !important;
+
   height: auto !important;
   min-height: 0 !important;
+
   margin: 0 !important;
   padding: 0 !important;
+
   overflow: visible !important;
   background: transparent !important;
+
   font-size: ${settings.fontSize}px !important;
   --font-text-size: ${settings.fontSize}px !important;
 }
@@ -242,10 +266,13 @@ body {
   width: 100% !important;
   max-width: none !important;
   min-width: 0 !important;
+
   height: auto !important;
   min-height: 0 !important;
+
   margin: 0 !important;
   padding: 0 !important;
+
   overflow: visible !important;
 }
 
@@ -253,16 +280,57 @@ body {
   width: 100% !important;
   max-width: none !important;
   min-width: 0 !important;
+
   height: auto !important;
   min-height: 0 !important;
+
   margin: 0 !important;
   padding: 0 !important;
+
   overflow: visible !important;
 }
 
 .pdf-preview-page img {
   max-width: 100% !important;
   height: auto !important;
+}
+
+/*
+ * Реальный PDF.
+ *
+ * Стандартный Obsidian margin уже выставлен в none.
+ * Поэтому наши поля задаются через padding контента.
+ */
+@media print {
+  @page {
+    size: A4 ${orientation};
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .markdown-preview-view,
+  .markdown-preview-sizer {
+    box-sizing: border-box !important;
+
+    padding-top: ${marginTop}px !important;
+    padding-right: ${marginRight}px !important;
+    padding-bottom: ${marginBottom}px !important;
+    padding-left: ${marginLeft}px !important;
+  }
+
+  .markdown-preview-view {
+    font-size: ${settings.fontSize}px !important;
+    --font-text-size: ${settings.fontSize}px !important;
+  }
+
+  .markdown-preview-sizer {
+    max-width: none !important;
+  }
 }
 `;
 }

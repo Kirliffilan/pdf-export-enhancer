@@ -1,26 +1,31 @@
 .pdf-export-layout {
   display: flex !important;
-  align-items: flex-start !important;
-  gap: 18px !important;
+  align-items: stretch !important;
+  gap: 36px !important;
   width: 100% !important;
   height: 100% !important;
   box-sizing: border-box !important;
+  min-height: 0 !important;
 }
 .pdf-export-settings-left {
-  flex: 0 0 270px !important;
-  width: 270px !important;
-  min-width: 0 !important;
+  flex: 0 0 200px !important;
+  width: 200px !important;
+  min-width: 200px !important;
   height: 100% !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
+  box-sizing: border-box !important;
+  padding-right: 4px !important;
 }
 .pdf-export-preview-right {
-  flex: 0 0 390px !important;
-  width: 390px !important;
-  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 500 !important;
+  height: 100% !important;
   display: flex;
   flex-direction: column;
   align-items: center;
+  box-sizing: border-box !important;
 }
 .pdf-export-preview-header {
   width: 100%;
@@ -102,7 +107,35 @@
 .pdf-export-font-size-setting {
   margin-top: 0;
 }
-.pdf-export-settings-left .setting-item {
+.pdf-export-margin-settings {
+  margin-top: 4px !important;
+  padding-top: 0 !important;
+}
+.pdf-export-margin-title {
+  padding-top: 10px !important;
+  padding-bottom: 5px !important;
+  margin: 0 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: var(--text-normal) !important;
+  border-bottom: 1px solid var(--background-modifier-border) !important;
+}
+.pdf-export-margin-settings .setting-item {
+  min-height: 38px !important;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  border-bottom: 0 !important;
+}
+.pdf-export-margin-settings .setting-item-info {
+  min-width: 0 !important;
+}
+.pdf-export-margin-settings .setting-item-name {
+  font-size: 14px !important;
+}
+.pdf-export-margin-settings .setting-item-control {
+  flex-shrink: 0 !important;
+}
+.pdf-export-settings-left > .setting-item {
   padding-top: 5px;
   padding-bottom: 5px;
 }

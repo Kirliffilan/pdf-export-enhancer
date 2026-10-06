@@ -2,16 +2,16 @@ import { App, PluginSettingTab } from "obsidian";
 import type { PdfExportSettings } from "../../settings/settings";
 import { PdfExportSettingTab } from "../../settings/settings-tab";
 import { PdfPreview } from "../pdf-preview";
-import type { NativePdfMargin, NativePdfSettings } from "../pdf-settings";
-import {
-  loadNativePdfSettings,
-  parseNativePdfMargin,
-} from "./pdf-modal-settings";
+import type { NativePdfSettings } from "../pdf-settings";
+import { loadNativePdfSettings } from "./pdf-modal-settings";
+
 import {
   configurePdfModalSize,
   createFontSetting,
+  createMarginSettings,
   createPdfLayout,
   forceA4,
+  hideMarginSetting,
   hideScaleSetting,
   setPreviewHeight,
 } from "./pdf-modal-ui";
@@ -116,19 +116,8 @@ export class PdfModal {
       modal.querySelectorAll('input[type="checkbox"]'),
     ) as HTMLInputElement[];
 
-    const selects = Array.from(
-      modal.querySelectorAll("select"),
-    ) as HTMLSelectElement[];
-
     const fileNameCheckbox = checkboxes[0];
     const landscapeCheckbox = checkboxes[1];
-
-    const marginSelect = selects.find(
-      (select) =>
-        !Array.from(select.options).some(
-          (option) => option.textContent?.trim().toLowerCase() === "a4",
-        ),
-    );
 
     if (fileNameCheckbox) {
       fileNameCheckbox.checked = this.nativePdfSettings.includeFileName;
@@ -137,24 +126,6 @@ export class PdfModal {
     if (landscapeCheckbox) {
       landscapeCheckbox.checked = this.nativePdfSettings.landscape;
     }
-
-    if (marginSelect) {
-      marginSelect.value = this.getNativeMarginValue(
-        this.nativePdfSettings.margin,
-      );
-    }
-  }
-
-  private getNativeMarginValue(margin: NativePdfMargin): string {
-    if (margin === "minimal") {
-      return "2";
-    }
-
-    if (margin === "none") {
-      return "1";
-    }
-
-    return "0";
   }
 
   private setup(modal: Element) {
@@ -165,6 +136,8 @@ export class PdfModal {
     configurePdfModalSize(modal);
     forceA4(modal);
     hideScaleSetting(modal);
+
+    hideMarginSetting(modal);
 
     const layout = createPdfLayout(modal);
 
@@ -186,10 +159,15 @@ export class PdfModal {
       this.preview,
     );
 
+    createMarginSettings(layout.left, this.plugin.pdfSettings, () =>
+      this.plugin.saveSettings(),
+    );
+
     this.bindNativeSettings(modal);
 
     requestAnimationFrame(() => {
       setPreviewHeight(this.preview);
+
       void this.preview?.refresh();
     });
   }
@@ -199,19 +177,8 @@ export class PdfModal {
       modal.querySelectorAll('input[type="checkbox"]'),
     ) as HTMLInputElement[];
 
-    const selects = Array.from(
-      modal.querySelectorAll("select"),
-    ) as HTMLSelectElement[];
-
     const fileNameCheckbox = checkboxes[0];
     const landscapeCheckbox = checkboxes[1];
-
-    const marginSelect = selects.find(
-      (select) =>
-        !Array.from(select.options).some(
-          (option) => option.textContent?.trim().toLowerCase() === "a4",
-        ),
-    );
 
     fileNameCheckbox?.addEventListener("change", () => {
       if (!this.nativePdfSettings) {
@@ -231,18 +198,6 @@ export class PdfModal {
       }
 
       this.nativePdfSettings.landscape = landscapeCheckbox.checked;
-
-      this.preview?.setNativeSettings(this.nativePdfSettings);
-
-      void this.preview?.refresh();
-    });
-
-    marginSelect?.addEventListener("change", () => {
-      if (!this.nativePdfSettings) {
-        return;
-      }
-
-      this.nativePdfSettings.margin = parseNativePdfMargin(marginSelect.value);
 
       this.preview?.setNativeSettings(this.nativePdfSettings);
 

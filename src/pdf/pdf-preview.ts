@@ -26,6 +26,7 @@ export class PdfPreview {
   private iframe: HTMLIFrameElement | null = null;
   private currentPage = 0;
   private pageCount = 1;
+  private refreshId = 0;
 
   constructor(
     app: App,
@@ -54,6 +55,8 @@ export class PdfPreview {
   }
 
   async refresh() {
+    const refreshId = ++this.refreshId;
+    const requestedPage = this.currentPage;
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 
     if (!view) {
@@ -62,6 +65,7 @@ export class PdfPreview {
           ? "Не удалось получить текущую заметку"
           : "Could not get the current note",
       );
+
       return;
     }
 
@@ -73,10 +77,9 @@ export class PdfPreview {
           ? "Не удалось получить текст заметки"
           : "Could not get note content",
       );
+
       return;
     }
-
-    this.currentPage = 0;
 
     const html = await renderMarkdown(
       this.app,
@@ -84,26 +87,38 @@ export class PdfPreview {
       source.sourcePath,
     );
 
+    if (refreshId !== this.refreshId) {
+      return;
+    }
+
     if (!html) {
       this.showError(
         this.isRussian()
           ? "Ошибка рендера Markdown"
           : "Markdown rendering error",
       );
+
       return;
     }
 
-    await this.createIframe(html, source.sourcePath);
+    await this.createIframe(html, source.sourcePath, refreshId, requestedPage);
   }
 
-  private async createIframe(html: string, sourcePath: string) {
+  private async createIframe(
+    html: string,
+    sourcePath: string,
+    refreshId: number,
+    requestedPage: number,
+  ) {
     this.viewport.empty();
+
     this.iframe = null;
 
     const iframe = document.createElement("iframe");
     iframe.className = "pdf-export-preview-iframe";
     iframe.setAttribute("frameborder", "0");
     iframe.setAttribute("scrolling", "no");
+
     this.viewport.appendChild(iframe);
     this.iframe = iframe;
 
@@ -115,6 +130,7 @@ export class PdfPreview {
           ? "Не удалось создать предпросмотр"
           : "Could not create preview",
       );
+
       return;
     }
 
@@ -132,7 +148,14 @@ export class PdfPreview {
 
     await waitForIframeResources(doc);
 
-    this.pageCount = paginatePreview(doc, this.getPageHeight());
+    if (refreshId !== this.refreshId) {
+      return;
+    }
+
+    const newPageCount = paginatePreview(doc, this.getPageHeight());
+
+    this.pageCount = newPageCount;
+    this.currentPage = Math.min(Math.max(requestedPage, 0), this.pageCount - 1);
 
     this.updateHeader();
     this.renderNavigation();
@@ -162,7 +185,9 @@ export class PdfPreview {
         }
 
         this.currentPage--;
+
         this.updateNavigation();
+
         this.showPage();
       },
       () => {
@@ -269,7 +294,9 @@ export class PdfPreview {
     this.viewport.empty();
 
     const error = document.createElement("div");
-    error.className = "pdf-export-preview-error";
+
+    error.className = "pdf-preview-error";
+
     error.textContent = message;
 
     this.viewport.appendChild(error);
@@ -321,6 +348,7 @@ export class PdfPreview {
   }
 
   destroy() {
+    this.refreshId++;
     this.iframe = null;
     this.container.empty();
   }
