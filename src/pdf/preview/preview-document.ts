@@ -172,8 +172,8 @@ function getPreviewCss(
     nativeSettings.margin === "none"
       ? 0
       : nativeSettings.margin === "minimal"
-        ? 24
-        : 48;
+        ? 14
+        : 38;
 
   return `
 * {
