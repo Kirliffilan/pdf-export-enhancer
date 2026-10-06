@@ -13,7 +13,6 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,33 +26,26 @@ jobs:
           cache: npm
 
       - name: Set version from tag
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME}"
-
           node <<'EOF'
           const fs = require("fs");
 
-          for (const path of ["manifest.json", "package.json"]) {
-            const data = JSON.parse(
-              fs.readFileSync(path, "utf8")
-            );
+          const version = process.env.TAG_VERSION;
 
-            data.version = process.env.TAG_VERSION;
-
-            fs.writeFileSync(
-              path,
-              JSON.stringify(data, null, 2) + "\n"
-            );
+          if (!version) {
+            throw new Error("TAG_VERSION is not set");
           }
+
+          for (const path of ["manifest.json", "package.json"]) {
+            const data = JSON.parse(fs.readFileSync(path, "utf8"));
+            data.version = version;
+            fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
+          }
+
+          console.log(`Version set to ${version}`);
           EOF
-
-          echo "Version set to ${TAG_VERSION}"
-
-          echo "manifest.json:"
-          node -p "require('./manifest.json').version"
-
-          echo "package.json:"
-          node -p "require('./package.json').version"
 
       - name: Install dependencies
         run: npm ci
@@ -68,52 +60,46 @@ jobs:
           cp manifest.json release-artifacts/manifest.json
 
       - name: Update repository versions
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME}"
-
           git fetch origin "${{ github.event.repository.default_branch }}"
           git checkout --detach "origin/${{ github.event.repository.default_branch }}"
+
+          export MIN_APP_VERSION=$(node -p "require('./manifest.json').minAppVersion")
 
           node <<'EOF'
           const fs = require("fs");
 
-          const manifestPath = "manifest.json";
-          const packagePath = "package.json";
-          const versionsPath = "versions.json";
+          const version = process.env.TAG_VERSION;
+          const minAppVersion = process.env.MIN_APP_VERSION;
 
-          for (const path of [manifestPath, packagePath]) {
-            const data = JSON.parse(
-              fs.readFileSync(path, "utf8")
-            );
-
-            data.version = process.env.TAG_VERSION;
-
-            fs.writeFileSync(
-              path,
-              JSON.stringify(data, null, 2) + "\n"
-            );
+          if (!version) {
+            throw new Error("TAG_VERSION is not set");
           }
 
-          const manifest = JSON.parse(
-            fs.readFileSync(manifestPath, "utf8")
-          );
+          if (!minAppVersion) {
+            throw new Error("MIN_APP_VERSION is not set");
+          }
 
+          for (const path of ["manifest.json", "package.json"]) {
+            const data = JSON.parse(fs.readFileSync(path, "utf8"));
+            data.version = version;
+            fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
+          }
+
+          const versionsPath = "versions.json";
           let versions = {};
 
           if (fs.existsSync(versionsPath)) {
-            versions = JSON.parse(
-              fs.readFileSync(versionsPath, "utf8")
-            );
+            versions = JSON.parse(fs.readFileSync(versionsPath, "utf8"));
           }
 
-          versions[process.env.TAG_VERSION] =
-            manifest.minAppVersion;
+          versions[version] = minAppVersion;
 
           const sortedVersions = Object.fromEntries(
             Object.entries(versions).sort((a, b) =>
-              b[0].localeCompare(a[0], undefined, {
-                numeric: true
-              })
+              b[0].localeCompare(a[0], undefined, { numeric: true })
             )
           );
 
@@ -121,6 +107,8 @@ jobs:
             versionsPath,
             JSON.stringify(sortedVersions, null, 2) + "\n"
           );
+
+          console.log(`Added ${version}: ${minAppVersion} to versions.json`);
           EOF
 
           git config user.name "github-actions[bot]"
