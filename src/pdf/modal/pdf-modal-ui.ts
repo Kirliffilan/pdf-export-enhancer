@@ -1,7 +1,6 @@
 import { Setting, getLanguage } from "obsidian";
 import type { PdfExportSettings } from "../../settings/settings";
 import type { PdfPreview } from "../pdf-preview";
-
 export function configurePdfModalSize(modal: Element) {
   const modalEl = modal as HTMLElement;
   const size = "min(92vw, 92vh)";
@@ -21,10 +20,10 @@ export function configurePdfModalSize(modal: Element) {
     content.style.setProperty("box-sizing", "border-box", "important");
   }
 }
-
-export function createPdfLayout(
-  modal: Element,
-): { left: HTMLElement; right: HTMLElement } | null {
+export function createPdfLayout(modal: Element): {
+  left: HTMLElement;
+  right: HTMLElement;
+} | null {
   const content = modal.querySelector(".modal-content") as HTMLElement | null;
   if (!content) {
     return null;
@@ -37,30 +36,31 @@ export function createPdfLayout(
   right.className = "pdf-export-preview-right";
   const children = Array.from(content.children);
   children.forEach((child) => {
+    const text = child.textContent?.trim() ?? "";
+    if (text.startsWith("Экспорт ") && text.includes(" в PDF")) {
+      (child as HTMLElement).style.display = "none";
+      return;
+    }
     left.appendChild(child);
   });
   layout.appendChild(left);
   layout.appendChild(right);
   content.appendChild(layout);
-  return { left, right };
+  return {
+    left,
+    right,
+  };
 }
-
 export function createFontSetting(
   container: HTMLElement,
   settings: PdfExportSettings,
   saveSettings: () => Promise<void>,
-  preview: PdfPreview | null,
 ) {
   const isRussian = getLanguage() === "ru";
   const wrapper = document.createElement("div");
   wrapper.className = "pdf-export-font-size-setting";
   new Setting(wrapper)
     .setName(isRussian ? "Размер шрифта" : "Text size")
-    .setDesc(
-      isRussian
-        ? "Размер текста при экспорте в PDF"
-        : "Text size used when exporting to PDF",
-    )
     .addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.step = "0.5";
@@ -78,7 +78,6 @@ export function createFontSetting(
     });
   container.appendChild(wrapper);
 }
-
 export function createMarginSettings(
   container: HTMLElement,
   settings: PdfExportSettings,
@@ -121,7 +120,6 @@ export function createMarginSettings(
   );
   container.appendChild(wrapper);
 }
-
 function createMarginInput(
   container: HTMLElement,
   name: string,
@@ -145,7 +143,6 @@ function createMarginInput(
     text.inputEl.style.width = "90px";
   });
 }
-
 export function forceA4(modal: Element) {
   const settings = Array.from(modal.querySelectorAll(".setting-item"));
   const pageSetting = settings.find((setting) => {
@@ -169,12 +166,15 @@ export function forceA4(modal: Element) {
     );
     if (a4) {
       select.value = a4.value;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      select.dispatchEvent(
+        new Event("change", {
+          bubbles: true,
+        }),
+      );
     }
   }
   (pageSetting as HTMLElement).style.display = "none";
 }
-
 export function hideScaleSetting(modal: Element) {
   const settings = Array.from(modal.querySelectorAll(".setting-item"));
   const scaleSetting = settings.find((setting) =>
@@ -185,7 +185,6 @@ export function hideScaleSetting(modal: Element) {
   }
   (scaleSetting as HTMLElement).style.display = "none";
 }
-
 export function hideMarginSetting(modal: Element) {
   const settings = Array.from(modal.querySelectorAll(".setting-item"));
   const marginSetting = settings.find((setting) => {
@@ -202,7 +201,6 @@ export function hideMarginSetting(modal: Element) {
   }
   (marginSetting as HTMLElement).style.display = "none";
 }
-
 export function setPreviewHeight(preview: PdfPreview | null) {
   preview?.setHeight(540);
 }

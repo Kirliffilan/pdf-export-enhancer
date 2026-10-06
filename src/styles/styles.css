@@ -1,7 +1,7 @@
 .pdf-export-layout {
   display: flex !important;
-  align-items: stretch !important;
-  gap: 36px !important;
+  align-items: flex-start !important;
+  gap: 24px !important;
   width: 100% !important;
   height: 100% !important;
   box-sizing: border-box !important;
@@ -15,12 +15,11 @@
   overflow-y: auto !important;
   overflow-x: hidden !important;
   box-sizing: border-box !important;
-  padding-right: 4px !important;
 }
 .pdf-export-preview-right {
   flex: 1 1 auto !important;
   width: auto !important;
-  min-width: 500 !important;
+  min-width: 0 !important;
   height: 100% !important;
   display: flex;
   flex-direction: column;
@@ -86,13 +85,14 @@
   color: var(--text-muted);
 }
 .pdf-export-preview-viewport {
-  position: relative;
+  position: relative !important;
   overflow: hidden !important;
   background: var(--background-secondary);
   border-radius: 6px;
   box-sizing: border-box;
   margin: 0 auto;
   flex: none !important;
+  isolation: isolate;
 }
 .pdf-export-preview-iframe {
   display: block;
@@ -103,31 +103,75 @@
   background: white;
   overflow: hidden !important;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.18);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  z-index: 1 !important;
+}
+.pdf-export-preview-cover {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: var(--background-secondary) !important;
+  border-radius: 6px !important;
+  z-index: 100 !important;
+  opacity: 1;
+  pointer-events: none !important;
+  transition: opacity 140ms ease-in-out !important;
+}
+.pdf-preview-pages {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+.pdf-preview-page {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  box-sizing: border-box !important;
+  transition: none !important;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 .pdf-export-font-size-setting {
-  margin-top: 0;
+  margin-top: 0 !important;
 }
 .pdf-export-margin-settings {
-  margin-top: 4px !important;
+  margin-top: 8px !important;
   padding-top: 0 !important;
 }
 .pdf-export-margin-title {
-  padding-top: 10px !important;
-  padding-bottom: 5px !important;
   margin: 0 !important;
+  padding: 8px 0 !important;
   font-size: 14px !important;
   font-weight: 600 !important;
   color: var(--text-normal) !important;
   border-bottom: 1px solid var(--background-modifier-border) !important;
 }
-.pdf-export-margin-settings .setting-item {
-  min-height: 38px !important;
-  padding-top: 2px !important;
-  padding-bottom: 2px !important;
-  border-bottom: 0 !important;
+.pdf-export-settings-left .setting-item {
+  min-height: 40px !important;
+  padding: 6px 0 !important;
+  border-bottom: 1px solid var(--background-modifier-border) !important;
 }
-.pdf-export-margin-settings .setting-item-info {
+.pdf-export-settings-left .setting-item-info {
   min-width: 0 !important;
+}
+.pdf-export-settings-left .setting-item-name {
+  font-size: 14px !important;
+}
+.pdf-export-settings-left .setting-item-description {
+  font-size: 12px !important;
+}
+.pdf-export-settings-left .setting-item-control {
+  flex-shrink: 0 !important;
+}
+.pdf-export-margin-settings .setting-item {
+  min-height: 40px !important;
+  padding: 6px 0 !important;
+  border-bottom: 1px solid var(--background-modifier-border) !important;
 }
 .pdf-export-margin-settings .setting-item-name {
   font-size: 14px !important;
@@ -135,21 +179,9 @@
 .pdf-export-margin-settings .setting-item-control {
   flex-shrink: 0 !important;
 }
-.pdf-export-settings-left > .setting-item {
-  padding-top: 5px;
-  padding-bottom: 5px;
-}
-.pdf-export-settings-left .setting-item-info {
-  min-width: 0;
-}
-.pdf-export-settings-left .setting-item-name {
-  font-size: 14px;
-}
-.pdf-export-settings-left .setting-item-description {
-  font-size: 12px;
-}
-.pdf-export-settings-left .setting-item-control {
-  flex-shrink: 0;
+.pdf-export-margin-settings .setting-item-control input[type="text"],
+.pdf-export-margin-settings .setting-item-control input[type="number"] {
+  width: 90px !important;
 }
 .pdf-export-preview-error {
   padding: 20px;
@@ -164,6 +196,7 @@
   .pdf-export-settings-left {
     flex: none !important;
     width: 100% !important;
+    min-width: 0 !important;
     height: auto !important;
     overflow: visible !important;
   }
