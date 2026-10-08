@@ -56,3 +56,16 @@ export function hideMarginSetting(modal: Element) {
 export function setPreviewHeight(preview: PdfPreview | null) {
   preview?.setHeight(540);
 }
+export function hideNativeCheckboxSettings(modal: Element) {
+  const settings = Array.from(modal.querySelectorAll(".setting-item"));
+
+  for (const setting of settings) {
+    const checkbox = setting.querySelector('input[type="checkbox"]');
+
+    if (!checkbox) {
+      continue;
+    }
+
+    (setting as HTMLElement).style.display = "none";
+  }
+}

@@ -1,9 +1,14 @@
 export function configurePdfModalSize(modal: Element) {
   const modalEl = modal as HTMLElement;
+
   modalEl.style.setProperty("width", "min(82vw, 1000px)", "important");
+
   modalEl.style.setProperty("height", "min(86vh, 880px)", "important");
+
   modalEl.style.setProperty("max-width", "82vw", "important");
+
   modalEl.style.setProperty("max-height", "calc(100vh - 20px)", "important");
+
   modalEl.style.setProperty("min-width", "0", "important");
   modalEl.style.setProperty("min-height", "0", "important");
   modalEl.style.setProperty("box-sizing", "border-box", "important");
@@ -23,6 +28,7 @@ export function configurePdfModalSize(modal: Element) {
   }
 
   const title = modalEl.querySelector(".modal-title") as HTMLElement | null;
+
   if (title) {
     title.style.display = "none";
   }
@@ -33,12 +39,14 @@ export function createPdfLayout(modal: Element): {
   right: HTMLElement;
 } | null {
   const content = modal.querySelector(".modal-content") as HTMLElement | null;
+
   if (!content) {
     return null;
   }
 
   const layout = document.createElement("div");
   layout.className = "pdf-export-layout";
+
   layout.style.setProperty("display", "flex", "important");
   layout.style.setProperty("align-items", "center", "important");
   layout.style.setProperty("justify-content", "center", "important");
@@ -53,6 +61,7 @@ export function createPdfLayout(modal: Element): {
 
   const left = document.createElement("div");
   left.className = "pdf-export-settings-left";
+
   left.style.setProperty("flex", "0 0 285px", "important");
   left.style.setProperty("width", "285px", "important");
   left.style.setProperty("min-width", "285px", "important");
@@ -68,6 +77,7 @@ export function createPdfLayout(modal: Element): {
 
   const right = document.createElement("div");
   right.className = "pdf-export-preview-right";
+
   right.style.setProperty("flex", "1 1 auto", "important");
   right.style.setProperty("width", "auto", "important");
   right.style.setProperty("min-width", "0", "important");
@@ -81,6 +91,7 @@ export function createPdfLayout(modal: Element): {
 
   const settingsInner = document.createElement("div");
   settingsInner.className = "pdf-export-settings-inner";
+
   settingsInner.style.setProperty("width", "100%", "important");
   settingsInner.style.setProperty("height", "auto", "important");
   settingsInner.style.setProperty("max-height", "100%", "important");
@@ -96,13 +107,24 @@ export function createPdfLayout(modal: Element): {
       return;
     }
 
+    if (child.querySelector('input[type="checkbox"]')) {
+      (child as HTMLElement).style.display = "none";
+      settingsInner.appendChild(child);
+      return;
+    }
+
     child.remove();
   });
 
   left.appendChild(settingsInner);
+
   layout.appendChild(left);
   layout.appendChild(right);
+
   content.appendChild(layout);
 
-  return { left, right };
+  return {
+    left,
+    right,
+  };
 }

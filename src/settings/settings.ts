@@ -1,4 +1,5 @@
 export type PdfPageNumberPosition = "left" | "center" | "right";
+
 export interface PdfExportSettings {
   fontSize: number;
   marginTop: number;
@@ -12,7 +13,10 @@ export interface PdfExportSettings {
   pageBreakH1: boolean;
   pageBreakH2: boolean;
   monochrome: boolean;
+  includeFileName: boolean;
+  landscape: boolean;
 }
+
 export const DEFAULT_SETTINGS: PdfExportSettings = {
   fontSize: 16.5,
   marginTop: 15,
@@ -26,4 +30,6 @@ export const DEFAULT_SETTINGS: PdfExportSettings = {
   pageBreakH1: false,
   pageBreakH2: false,
   monochrome: false,
+  includeFileName: false,
+  landscape: false,
 };

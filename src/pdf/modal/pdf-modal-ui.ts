@@ -12,6 +12,7 @@ import {
   forceA4,
   hideScaleSetting,
   hideMarginSetting,
+  hideNativeCheckboxSettings,
   setPreviewHeight,
 } from "./pdf-modal-helpers";
 
@@ -24,6 +25,7 @@ export {
   createLineSpacingSetting,
   createPageNumberSettings,
   createPageBreakSettings,
+  hideNativeCheckboxSettings,
   createMonochromeSetting,
   forceA4,
   hideScaleSetting,
