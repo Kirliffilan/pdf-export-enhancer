@@ -1,31 +1,34 @@
 .pdf-export-layout {
-  display: flex !important;
-  align-items: flex-start !important;
-  gap: 24px !important;
-  width: 100% !important;
-  height: 100% !important;
-  box-sizing: border-box !important;
-  min-height: 0 !important;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  min-height: 0;
 }
-.pdf-export-settings-left {
-  flex: 0 0 200px !important;
-  width: 200px !important;
-  min-width: 200px !important;
-  height: 100% !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  box-sizing: border-box !important;
+
+.pdf-export-layout .pdf-export-settings-left {
+  flex: 0 0 200px;
+  width: 200px;
+  min-width: 200px;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
-.pdf-export-preview-right {
-  flex: 1 1 auto !important;
-  width: auto !important;
-  min-width: 0 !important;
-  height: 100% !important;
+
+.pdf-export-layout .pdf-export-preview-right {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  box-sizing: border-box !important;
+  box-sizing: border-box;
 }
+
 .pdf-export-preview-header {
   width: 100%;
   text-align: center;
@@ -34,6 +37,7 @@
   margin-bottom: 8px;
   white-space: nowrap;
 }
+
 .pdf-export-preview-navigation {
   display: flex;
   align-items: center;
@@ -42,6 +46,7 @@
   margin-bottom: 8px;
   min-height: 30px;
 }
+
 .pdf-preview-arrow {
   width: 32px;
   height: 30px;
@@ -57,13 +62,16 @@
   font-size: 17px;
   line-height: 1;
 }
+
 .pdf-preview-arrow:hover:not(:disabled) {
   background: var(--background-modifier-hover);
 }
+
 .pdf-preview-arrow:disabled {
   opacity: 0.4;
   cursor: default;
 }
+
 .pdf-preview-page-input {
   width: 48px;
   height: 30px;
@@ -76,135 +84,165 @@
   color: var(--text-normal);
   font-size: 14px;
 }
+
 .pdf-preview-page-input:focus {
   border-color: var(--interactive-accent);
   outline: none;
 }
+
 .pdf-preview-page-total {
   font-size: 14px;
   color: var(--text-muted);
 }
+
 .pdf-export-preview-viewport {
-  position: relative !important;
-  overflow: hidden !important;
+  position: relative;
+  overflow: hidden;
   background: var(--background-secondary);
   border-radius: 6px;
   box-sizing: border-box;
   margin: 0 auto;
-  flex: none !important;
+  flex: none;
   isolation: isolate;
 }
-.pdf-export-preview-iframe {
+
+.pdf-export-preview-viewport .pdf-export-preview-iframe {
   display: block;
   position: absolute;
-  border: 0 !important;
+  border: 0;
   margin: 0;
   padding: 0;
   background: white;
-  overflow: hidden !important;
+  overflow: hidden;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.18);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  z-index: 1 !important;
+  z-index: 1;
 }
-.pdf-export-preview-cover {
-  position: absolute !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  background: var(--background-secondary) !important;
-  border-radius: 6px !important;
-  z-index: 100 !important;
+
+.pdf-export-preview-viewport .pdf-export-preview-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--background-secondary);
+  border-radius: 6px;
+  z-index: 100;
   opacity: 1;
-  pointer-events: none !important;
-  transition: opacity 140ms ease-in-out !important;
+  pointer-events: none;
+  transition: opacity 140ms ease-in-out;
 }
-.pdf-preview-pages {
-  position: relative !important;
-  width: 100% !important;
-  height: 100% !important;
-  overflow: hidden !important;
+
+.pdf-export-preview-viewport .pdf-preview-pages {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
-.pdf-preview-page {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  box-sizing: border-box !important;
-  transition: none !important;
+
+.pdf-preview-pages .pdf-preview-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  transition: none;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
-.pdf-export-font-size-setting {
-  margin-top: 0 !important;
+
+.pdf-export-settings-left .pdf-export-font-size-setting {
+  margin-top: 0;
 }
-.pdf-export-margin-settings {
-  margin-top: 8px !important;
-  padding-top: 0 !important;
+
+.pdf-export-settings-left .pdf-export-margin-settings {
+  margin-top: 8px;
+  padding-top: 0;
 }
-.pdf-export-margin-title {
-  margin: 0 !important;
-  padding: 8px 0 !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  color: var(--text-normal) !important;
-  border-bottom: 1px solid var(--background-modifier-border) !important;
+
+.pdf-export-settings-left .pdf-export-margin-title {
+  margin: 0;
+  padding: 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+  border-bottom: 1px solid var(--background-modifier-border);
 }
-.pdf-export-settings-left .setting-item {
-  min-height: 40px !important;
-  padding: 6px 0 !important;
-  border-bottom: 1px solid var(--background-modifier-border) !important;
+
+.pdf-export-layout .pdf-export-settings-left .setting-item {
+  min-height: 40px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
 }
-.pdf-export-settings-left .setting-item-info {
-  min-width: 0 !important;
+
+.pdf-export-layout .pdf-export-settings-left .setting-item-info {
+  min-width: 0;
 }
-.pdf-export-settings-left .setting-item-name {
-  font-size: 14px !important;
+
+.pdf-export-layout .pdf-export-settings-left .setting-item-name {
+  font-size: 14px;
 }
-.pdf-export-settings-left .setting-item-description {
-  font-size: 12px !important;
+
+.pdf-export-layout .pdf-export-settings-left .setting-item-description {
+  font-size: 12px;
 }
-.pdf-export-settings-left .setting-item-control {
-  flex-shrink: 0 !important;
+
+.pdf-export-layout .pdf-export-settings-left .setting-item-control {
+  flex-shrink: 0;
 }
-.pdf-export-margin-settings .setting-item {
-  min-height: 40px !important;
-  padding: 6px 0 !important;
-  border-bottom: 1px solid var(--background-modifier-border) !important;
+
+.pdf-export-layout .pdf-export-margin-settings .setting-item {
+  min-height: 40px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
 }
-.pdf-export-margin-settings .setting-item-name {
-  font-size: 14px !important;
+
+.pdf-export-layout .pdf-export-margin-settings .setting-item-name {
+  font-size: 14px;
 }
-.pdf-export-margin-settings .setting-item-control {
-  flex-shrink: 0 !important;
+
+.pdf-export-layout .pdf-export-margin-settings .setting-item-control {
+  flex-shrink: 0;
 }
-.pdf-export-margin-settings .setting-item-control input[type="text"],
-.pdf-export-margin-settings .setting-item-control input[type="number"] {
-  width: 90px !important;
+
+.pdf-export-layout
+  .pdf-export-margin-settings
+  .setting-item-control
+  input[type="text"],
+.pdf-export-layout
+  .pdf-export-margin-settings
+  .setting-item-control
+  input[type="number"] {
+  width: 90px;
 }
+
 .pdf-export-preview-error {
   padding: 20px;
   color: var(--text-error);
   font-size: 14px;
 }
+
 @media (max-width: 800px) {
   .pdf-export-layout {
-    flex-direction: column !important;
-    height: auto !important;
+    flex-direction: column;
+    height: auto;
   }
-  .pdf-export-settings-left {
-    flex: none !important;
-    width: 100% !important;
-    min-width: 0 !important;
-    height: auto !important;
-    overflow: visible !important;
+
+  .pdf-export-layout .pdf-export-settings-left {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    overflow: visible;
   }
-  .pdf-export-preview-right {
-    flex: none !important;
-    width: 100% !important;
+
+  .pdf-export-layout .pdf-export-preview-right {
+    flex: none;
+    width: 100%;
   }
-  .pdf-export-preview-viewport {
-    max-width: 100% !important;
+
+  .pdf-export-layout .pdf-export-preview-viewport {
+    max-width: 100%;
   }
 }

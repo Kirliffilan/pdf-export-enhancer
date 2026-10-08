@@ -7,7 +7,9 @@ export function configurePdfModalSize(modal: Element) {
   modalEl.style.setProperty("min-width", "0", "important");
   modalEl.style.setProperty("min-height", "0", "important");
   modalEl.style.setProperty("box-sizing", "border-box", "important");
+
   const content = modalEl.querySelector(".modal-content") as HTMLElement | null;
+
   if (content) {
     content.style.setProperty("width", "100%", "important");
     content.style.setProperty("height", "100%", "important");
@@ -19,11 +21,13 @@ export function configurePdfModalSize(modal: Element) {
     content.style.setProperty("align-items", "center", "important");
     content.style.setProperty("justify-content", "center", "important");
   }
+
   const title = modalEl.querySelector(".modal-title") as HTMLElement | null;
   if (title) {
     title.style.display = "none";
   }
 }
+
 export function createPdfLayout(modal: Element): {
   left: HTMLElement;
   right: HTMLElement;
@@ -32,7 +36,7 @@ export function createPdfLayout(modal: Element): {
   if (!content) {
     return null;
   }
-  hideNativeExportCaption(content);
+
   const layout = document.createElement("div");
   layout.className = "pdf-export-layout";
   layout.style.setProperty("display", "flex", "important");
@@ -46,6 +50,7 @@ export function createPdfLayout(modal: Element): {
   layout.style.setProperty("box-sizing", "border-box", "important");
   layout.style.setProperty("gap", "16px", "important");
   layout.style.setProperty("flex-shrink", "0", "important");
+
   const left = document.createElement("div");
   left.className = "pdf-export-settings-left";
   left.style.setProperty("flex", "0 0 285px", "important");
@@ -60,6 +65,7 @@ export function createPdfLayout(modal: Element): {
   left.style.setProperty("box-sizing", "border-box", "important");
   left.style.setProperty("overflow", "hidden", "important");
   left.style.setProperty("padding", "0 2px", "important");
+
   const right = document.createElement("div");
   right.className = "pdf-export-preview-right";
   right.style.setProperty("flex", "1 1 auto", "important");
@@ -72,6 +78,7 @@ export function createPdfLayout(modal: Element): {
   right.style.setProperty("flex-direction", "column", "important");
   right.style.setProperty("align-items", "center", "important");
   right.style.setProperty("justify-content", "center", "important");
+
   const settingsInner = document.createElement("div");
   settingsInner.className = "pdf-export-settings-inner";
   settingsInner.style.setProperty("width", "100%", "important");
@@ -80,67 +87,22 @@ export function createPdfLayout(modal: Element): {
   settingsInner.style.setProperty("overflow-y", "auto", "important");
   settingsInner.style.setProperty("overflow-x", "hidden", "important");
   settingsInner.style.setProperty("box-sizing", "border-box", "important");
+
   const children = Array.from(content.children);
+
   children.forEach((child) => {
-    if (isExportDescription(child)) {
-      (child as HTMLElement).style.setProperty("display", "none", "important");
+    if (child.querySelector("button")) {
+      settingsInner.appendChild(child);
       return;
     }
-    if (isNativeFileNameSetting(child) || isNativeLandscapeSetting(child)) {
-      (child as HTMLElement).style.setProperty("display", "none", "important");
-      return;
-    }
-    settingsInner.appendChild(child);
+
+    child.remove();
   });
+
   left.appendChild(settingsInner);
   layout.appendChild(left);
   layout.appendChild(right);
   content.appendChild(layout);
+
   return { left, right };
-}
-function hideNativeExportCaption(content: HTMLElement) {
-  const elements = [content, ...Array.from(content.querySelectorAll("*"))];
-  for (const element of elements) {
-    if (!(element instanceof HTMLElement)) {
-      continue;
-    }
-    if (!isExportDescription(element)) {
-      continue;
-    }
-    const hasMatchingChild = Array.from(element.children).some((child) =>
-      isExportDescription(child),
-    );
-    if (hasMatchingChild) {
-      continue;
-    }
-    element.style.setProperty("display", "none", "important");
-    return;
-  }
-}
-function isExportDescription(element: Element): boolean {
-  const text =
-    element.textContent?.replace(/\s+/g, " ").trim().toLowerCase() ?? "";
-  if (!text) {
-    return false;
-  }
-  return (
-    (text.includes("export") &&
-      text.includes("to pdf") &&
-      text.includes("settings below")) ||
-    (text.includes("экспорт") &&
-      text.includes("в pdf") &&
-      text.includes("настрой"))
-  );
-}
-function isNativeFileNameSetting(element: Element): boolean {
-  const text = element.textContent?.trim().toLowerCase() ?? "";
-  return (
-    text.includes("имя файла") ||
-    text.includes("include file name") ||
-    text.includes("include filename")
-  );
-}
-function isNativeLandscapeSetting(element: Element): boolean {
-  const text = element.textContent?.trim().toLowerCase() ?? "";
-  return text.includes("альбом") || text.includes("landscape");
 }
