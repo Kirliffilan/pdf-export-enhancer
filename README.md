@@ -2,7 +2,7 @@
 
 Enhance Obsidian's PDF export with a customizable text size, A4 page preview, pagination, and additional PDF formatting controls before exporting the note.
 
-**Version:** 2.0.0
+**Version:** 2.0.2
 
 ## Preview
 
