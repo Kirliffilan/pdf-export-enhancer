@@ -11,15 +11,16 @@ export function createNativeSettingsControls(
   settings: NativePdfSettings,
   onChange: (changes: NativeSettingChanges) => void,
 ) {
+  const nativeSettingsContainer =
+    modal.querySelector(".pdf-export-settings-inner") ?? modal;
   const checkboxes = Array.from(
-    modal.querySelectorAll('.setting-item input[type="checkbox"]'),
+    nativeSettingsContainer.querySelectorAll(
+      '.setting-item input[type="checkbox"]',
+    ),
   ) as HTMLInputElement[];
 
   const fileNameCheckbox = checkboxes[0] ?? null;
   const landscapeCheckbox = checkboxes[1] ?? null;
-
-  setNativeCheckboxState(fileNameCheckbox, settings.includeFileName);
-  setNativeCheckboxState(landscapeCheckbox, settings.landscape);
 
   const wrapper = document.createElement("div");
   wrapper.className = "pdf-export-native-icon-controls";
@@ -74,25 +75,15 @@ export function createNativeSettingsControls(
   wrapper.appendChild(landscapeButton);
   container.appendChild(wrapper);
 
-  syncState();
+  updateButtonState(fileButton, settings.includeFileName, false);
+  updateButtonState(landscapeButton, settings.landscape, true);
+
+  onChange({
+    includeFileName: settings.includeFileName,
+    landscape: settings.landscape,
+  });
+
   ensureNativeIconStyles();
-}
-
-function setNativeCheckboxState(
-  checkbox: HTMLInputElement | null,
-  value: boolean,
-) {
-  if (!checkbox || checkbox.checked === value) {
-    return;
-  }
-
-  checkbox.click();
-
-  if (checkbox.checked !== value) {
-    checkbox.checked = value;
-    checkbox.dispatchEvent(new Event("input", { bubbles: true }));
-    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
-  }
 }
 
 function createIconButton(

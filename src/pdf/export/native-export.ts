@@ -10,23 +10,19 @@ import {
 export class NativePdfExport {
   private getSettings: () => PdfExportSettings;
   private getNativeSettings: () => NativePdfSettings | null;
-  private app: App;
-
   private observer: MutationObserver | null = null;
   private exportStyleSnapshot = new Map<HTMLElement, string | null>();
   private insertedPageBreaks = new Set<HTMLElement>();
-  private insertedFileNameTitles = new Set<HTMLElement>();
   private nativePrintStyle: HTMLStyleElement | null = null;
   private cleanupTimeout: number | null = null;
 
   constructor(
     getSettings: () => PdfExportSettings,
     getNativeSettings: () => NativePdfSettings | null,
-    app: App,
+    _app: App,
   ) {
     this.getSettings = getSettings;
     this.getNativeSettings = getNativeSettings;
-    this.app = app;
   }
 
   start() {
@@ -68,9 +64,7 @@ export class NativePdfExport {
   private isGeneratedMutation(mutation: MutationRecord): boolean {
     if (
       mutation.target instanceof Element &&
-      mutation.target.closest(
-        ".pdf-export-native-file-name-title, .pdf-export-native-page-break",
-      )
+      mutation.target.closest(".pdf-export-native-page-break")
     ) {
       return true;
     }
@@ -91,10 +85,7 @@ export class NativePdfExport {
       return false;
     }
 
-    return (
-      node.classList.contains("pdf-export-native-file-name-title") ||
-      node.classList.contains("pdf-export-native-page-break")
-    );
+    return node.classList.contains("pdf-export-native-page-break");
   }
 
   private handleBeforePrint = () => {
@@ -140,67 +131,11 @@ export class NativePdfExport {
     }
 
     const settings = this.getSettings();
-    const nativeSettings = this.getNativeSettings();
     const saveStyle = (element: HTMLElement) => this.saveOriginalStyle(element);
 
     applyPrintLineSpacing(view, settings, saveStyle);
     applyPrintPageBreaks(view, settings, saveStyle, this.insertedPageBreaks);
     applyPrintMonochrome(view, settings, saveStyle);
-
-    if (nativeSettings) {
-      this.applyFileName(root, nativeSettings);
-    }
-  }
-
-  private applyFileName(root: HTMLElement, nativeSettings: NativePdfSettings) {
-    const file = this.app.workspace.getActiveFile();
-
-    if (!file) {
-      return;
-    }
-
-    const section = root.querySelector(
-      ".markdown-preview-section",
-    ) as HTMLElement | null;
-
-    if (!section) {
-      return;
-    }
-
-    const fileName = file.basename;
-
-    const existingTitle = Array.from(section.querySelectorAll("h1")).find(
-      (element) => element.textContent?.trim() === fileName,
-    ) as HTMLElement | undefined;
-
-    if (existingTitle) {
-      this.saveOriginalStyle(existingTitle);
-
-      existingTitle.style.setProperty(
-        "display",
-        nativeSettings.includeFileName ? "block" : "none",
-        "important",
-      );
-
-      if (
-        existingTitle.classList.contains("pdf-export-native-file-name-title")
-      ) {
-        this.insertedFileNameTitles.add(existingTitle);
-      }
-
-      return;
-    }
-
-    if (!nativeSettings.includeFileName) {
-      return;
-    }
-
-    const title = document.createElement("h1");
-    title.className = "pdf-export-native-file-name-title";
-    title.textContent = fileName;
-
-    section.prepend(title);
-    this.insertedFileNameTitles.add(title);
   }
 
   private applyNativePrintStyle() {
@@ -222,9 +157,6 @@ export class NativePdfExport {
     size: A4 ${nativeSettings.landscape ? "landscape" : "portrait"};
   }
 
-  .pdf-export-native-file-name-title {
-    display: ${nativeSettings.includeFileName ? "block" : "none"} !important;
-  }
 }
 `;
   }
@@ -243,12 +175,6 @@ export class NativePdfExport {
     }
 
     this.insertedPageBreaks.clear();
-
-    for (const titleElement of this.insertedFileNameTitles) {
-      titleElement.remove();
-    }
-
-    this.insertedFileNameTitles.clear();
 
     for (const [element, originalStyle] of this.exportStyleSnapshot) {
       if (!element.isConnected) {

@@ -14,7 +14,7 @@ export async function loadNativePdfSettings(
   app: App,
 ): Promise<NativePdfSettings | null> {
   try {
-    const raw = await app.vault.adapter.read(".obsidian/app.json");
+    const raw = await app.vault.adapter.read(`${app.vault.configDir}/app.json`);
     const config = JSON.parse(raw) as ObsidianAppConfig;
     const settings = config.pdfExportSettings;
     if (!settings) {

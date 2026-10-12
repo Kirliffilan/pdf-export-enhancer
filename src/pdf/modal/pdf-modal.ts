@@ -36,8 +36,8 @@ export class PdfModal {
   private nativePdfSettings: NativePdfSettings | null = null;
 
   private setupInProgress = false;
-  private nativeSettingsLoaded = false;
   private nativeSettingsLoading: Promise<void> | null = null;
+  private activeModal: Element | null = null;
 
   constructor(app: App, plugin: PdfModalPlugin) {
     this.app = app;
@@ -45,7 +45,18 @@ export class PdfModal {
   }
 
   start() {
-    this.observer = new MutationObserver(() => {
+    this.observer = new MutationObserver((mutations) => {
+      if (
+        this.activeModal &&
+        mutations.some((mutation) =>
+          Array.from(mutation.removedNodes).some((node) =>
+            this.containsNode(this.activeModal as Element, node),
+          ),
+        )
+      ) {
+        this.activeModal = null;
+      }
+
       void this.trySetup();
     });
 
@@ -54,7 +65,6 @@ export class PdfModal {
       subtree: true,
     });
 
-    void this.loadNativeSettings();
     void this.trySetup();
   }
 
@@ -63,21 +73,18 @@ export class PdfModal {
   }
 
   private async loadNativeSettings() {
-    if (this.nativeSettingsLoaded) {
-      return;
-    }
-
     if (this.nativeSettingsLoading) {
       await this.nativeSettingsLoading;
       return;
     }
 
     this.nativeSettingsLoading = (async () => {
-      const settings = await loadNativePdfSettings(this.app);
+      const loadedSettings = await loadNativePdfSettings(this.app);
 
-      if (settings) {
-        this.nativePdfSettings = settings;
-        this.nativeSettingsLoaded = true;
+      if (loadedSettings && this.nativePdfSettings) {
+        Object.assign(this.nativePdfSettings, loadedSettings);
+      } else {
+        this.nativePdfSettings = loadedSettings;
       }
     })();
 
@@ -89,30 +96,28 @@ export class PdfModal {
   }
 
   private async trySetup() {
-    if (document.querySelector(".pdf-export-layout")) {
-      return;
-    }
-
     if (this.setupInProgress) {
       return;
     }
 
-    const modals = Array.from(document.querySelectorAll(".modal"));
-
+    const modals = Array.from(document.querySelectorAll(".modal")).reverse();
     const modal = modals.find((element) => this.isPdfModal(element));
 
-    if (!modal) {
+    if (
+      !modal ||
+      (modal === this.activeModal && modal.querySelector(".pdf-export-layout"))
+    ) {
       return;
     }
 
+    const hasLayout = !!modal.querySelector(".pdf-export-layout");
+    this.activeModal = modal;
     this.setupInProgress = true;
 
     const modalEl = modal as HTMLElement;
-
     const modalContainer = modalEl.closest(
       ".modal-container",
     ) as HTMLElement | null;
-
     const modalBg = modalContainer?.querySelector(
       ".modal-bg",
     ) as HTMLElement | null;
@@ -122,13 +127,25 @@ export class PdfModal {
     try {
       await this.loadNativeSettings();
 
-      if (!this.nativePdfSettings) {
-        this.showAfterSetup(modalEl, modalContainer, modalBg);
-
+      if (!modal.isConnected) {
+        this.activeModal = null;
         return;
       }
 
-      this.setup(modal);
+      if (!this.nativePdfSettings) {
+        this.showAfterSetup(modalEl, modalContainer, modalBg);
+        return;
+      }
+
+      if (hasLayout) {
+        this.syncExistingNativeControls(modal);
+        this.preview?.setNativeSettings(this.nativePdfSettings);
+        void this.preview?.refresh();
+      } else {
+        this.preview?.destroy();
+        this.preview = null;
+        this.setup(modal);
+      }
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -137,6 +154,41 @@ export class PdfModal {
       });
     } finally {
       this.setupInProgress = false;
+
+      if (!this.activeModal || !this.activeModal.isConnected) {
+        void this.trySetup();
+      }
+    }
+  }
+
+  private containsNode(element: Element, node: Node): boolean {
+    return (
+      node === element || (node instanceof Element && node.contains(element))
+    );
+  }
+
+  private syncExistingNativeControls(modal: Element) {
+    const settings = this.nativePdfSettings;
+
+    if (!settings) {
+      return;
+    }
+
+    const buttons = Array.from(
+      modal.querySelectorAll(
+        ".pdf-export-native-icon-controls .pdf-export-native-icon-button",
+      ),
+    ) as HTMLButtonElement[];
+
+    if (buttons[0]) {
+      buttons[0].classList.toggle("is-active", settings.includeFileName);
+      buttons[0].setAttribute("aria-pressed", String(settings.includeFileName));
+    }
+
+    if (buttons[1]) {
+      buttons[1].classList.toggle("is-active", settings.landscape);
+      buttons[1].classList.toggle("is-landscape", settings.landscape);
+      buttons[1].setAttribute("aria-pressed", String(settings.landscape));
     }
   }
 
@@ -146,9 +198,7 @@ export class PdfModal {
     modalBg: HTMLElement | null,
   ) {
     modal.style.setProperty("visibility", "hidden", "important");
-
     modal.style.setProperty("opacity", "0", "important");
-
     modal.style.setProperty("transition", "none", "important");
 
     if (modalContainer) {
@@ -157,9 +207,7 @@ export class PdfModal {
 
     if (modalBg) {
       modalBg.style.setProperty("visibility", "hidden", "important");
-
       modalBg.style.setProperty("opacity", "0", "important");
-
       modalBg.style.setProperty("transition", "none", "important");
     }
   }
@@ -171,18 +219,15 @@ export class PdfModal {
   ) {
     if (modalBg) {
       modalBg.style.setProperty("visibility", "visible", "important");
-
       modalBg.style.setProperty("opacity", "1", "important");
     }
 
     if (modalContainer) {
       modalContainer.style.setProperty("visibility", "visible", "important");
-
       modalContainer.style.setProperty("opacity", "1", "important");
     }
 
     modal.style.setProperty("visibility", "visible", "important");
-
     modal.style.setProperty("opacity", "1", "important");
   }
 
@@ -273,7 +318,6 @@ export class PdfModal {
         Object.assign(this.nativePdfSettings, changes);
 
         this.preview?.setNativeSettings(this.nativePdfSettings);
-
         void this.preview?.refresh();
       },
     );
@@ -300,12 +344,10 @@ export class PdfModal {
     this.preview = null;
 
     this.nativePdfSettings = null;
-    this.nativeSettingsLoaded = false;
     this.nativeSettingsLoading = null;
     this.setupInProgress = false;
 
     document.querySelector(".pdf-export-layout")?.remove();
-
     document.getElementById("pdf-export-native-icon-styles")?.remove();
   }
 }
