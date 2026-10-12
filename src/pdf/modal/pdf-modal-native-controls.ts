@@ -11,79 +11,112 @@ export function createNativeSettingsControls(
   settings: NativePdfSettings,
   onChange: (changes: NativeSettingChanges) => void,
 ) {
-  const nativeSettingsContainer =
+  const settingsContainer =
     modal.querySelector(".pdf-export-settings-inner") ?? modal;
-  const checkboxes = Array.from(
-    nativeSettingsContainer.querySelectorAll(
-      '.setting-item input[type="checkbox"]',
-    ),
-  ) as HTMLInputElement[];
+  const settingItems = Array.from(
+    settingsContainer.querySelectorAll(".setting-item"),
+  ) as HTMLElement[];
 
-  const fileNameCheckbox = checkboxes[0] ?? null;
-  const landscapeCheckbox = checkboxes[1] ?? null;
+  const fileNameCheckbox = findNativeCheckbox(
+    settingItems,
+    /include\s*name|file\s*name|filename|имя.{0,24}(файл|заметк)|назван.{0,24}(файл|заметк)|(добав|включ|показыв).{0,24}имя/i,
+  );
+  const landscapeCheckbox = findNativeCheckbox(
+    settingItems,
+    /landscape|альбомн/i,
+  );
 
   const wrapper = document.createElement("div");
   wrapper.className = "pdf-export-native-icon-controls";
 
+  // These values are initialized from app.json by loadNativePdfSettings.
+  // Do not replace them with the hidden checkboxes' initial DOM state:
+  // Obsidian can render those checkboxes with stale values.
+  let includeFileName = settings.includeFileName;
+  let landscape = settings.landscape;
+
   const fileButton = createIconButton(
     "Имя файла в заголовке",
     "info",
-    settings.includeFileName,
+    includeFileName,
     false,
   );
 
   const landscapeButton = createIconButton(
     "Альбомная ориентация",
     "file",
-    settings.landscape,
+    landscape,
     true,
   );
-
-  const syncState = () => {
-    if (fileNameCheckbox) {
-      settings.includeFileName = fileNameCheckbox.checked;
-    }
-
-    if (landscapeCheckbox) {
-      settings.landscape = landscapeCheckbox.checked;
-    }
-
-    updateButtonState(fileButton, settings.includeFileName, false);
-    updateButtonState(landscapeButton, settings.landscape, true);
-
-    onChange({
-      includeFileName: settings.includeFileName,
-      landscape: settings.landscape,
-    });
-  };
 
   fileButton.disabled = !fileNameCheckbox;
   landscapeButton.disabled = !landscapeCheckbox;
 
-  fileNameCheckbox?.addEventListener("change", syncState);
-  landscapeCheckbox?.addEventListener("change", syncState);
-
   fileButton.addEventListener("click", () => {
-    fileNameCheckbox?.click();
+    if (!fileNameCheckbox) {
+      return;
+    }
+
+    // Keep the visual state tied to the app.json-derived state, not to
+    // checkbox.checked, which may be stale when the modal is first opened.
+    fileNameCheckbox.click();
+    includeFileName = !includeFileName;
+    settings.includeFileName = includeFileName;
+    updateButtonState(fileButton, includeFileName, false);
+    onChange({ includeFileName });
   });
 
   landscapeButton.addEventListener("click", () => {
-    landscapeCheckbox?.click();
+    if (!landscapeCheckbox) {
+      return;
+    }
+
+    landscapeCheckbox.click();
+    landscape = !landscape;
+    settings.landscape = landscape;
+    updateButtonState(landscapeButton, landscape, true);
+    onChange({ landscape });
   });
 
   wrapper.appendChild(fileButton);
   wrapper.appendChild(landscapeButton);
   container.appendChild(wrapper);
 
-  updateButtonState(fileButton, settings.includeFileName, false);
-  updateButtonState(landscapeButton, settings.landscape, true);
-
-  onChange({
-    includeFileName: settings.includeFileName,
-    landscape: settings.landscape,
-  });
-
   ensureNativeIconStyles();
+}
+
+function findNativeCheckbox(
+  settingItems: HTMLElement[],
+  pattern: RegExp,
+): HTMLInputElement | null {
+  for (const item of settingItems) {
+    const checkbox = item.querySelector(
+      'input[type="checkbox"]',
+    ) as HTMLInputElement | null;
+
+    if (!checkbox) {
+      continue;
+    }
+
+    const label = [
+      item.querySelector(".setting-item-name")?.textContent,
+      item.querySelector(".setting-item-description")?.textContent,
+      item.getAttribute("aria-label"),
+      checkbox.getAttribute("aria-label"),
+      checkbox.getAttribute("title"),
+      item.textContent,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (pattern.test(label)) {
+      return checkbox;
+    }
+  }
+
+  return null;
 }
 
 function createIconButton(
