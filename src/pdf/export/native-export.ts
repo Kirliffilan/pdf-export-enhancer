@@ -13,13 +13,11 @@ export class NativePdfExport {
   private app: App;
 
   private observer: MutationObserver | null = null;
-
   private exportStyleSnapshot = new Map<HTMLElement, string | null>();
-
   private insertedPageBreaks = new Set<HTMLElement>();
   private insertedFileNameTitles = new Set<HTMLElement>();
-
   private nativePrintStyle: HTMLStyleElement | null = null;
+  private cleanupTimeout: number | null = null;
 
   constructor(
     getSettings: () => PdfExportSettings,
@@ -36,8 +34,10 @@ export class NativePdfExport {
       return;
     }
 
-    this.observer = new MutationObserver(() => {
-      this.prepareAllPrintRoots();
+    this.observer = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) => !this.isGeneratedMutation(mutation))) {
+        this.prepareAllPrintRoots();
+      }
     });
 
     this.observer.observe(document.body, {
@@ -52,8 +52,12 @@ export class NativePdfExport {
   }
 
   destroy() {
-    this.cleanup();
+    if (this.cleanupTimeout !== null) {
+      window.clearTimeout(this.cleanupTimeout);
+      this.cleanupTimeout = null;
+    }
 
+    this.cleanup(true);
     this.observer?.disconnect();
     this.observer = null;
 
@@ -61,14 +65,56 @@ export class NativePdfExport {
     window.removeEventListener("afterprint", this.handleAfterPrint);
   }
 
+  private isGeneratedMutation(mutation: MutationRecord): boolean {
+    if (
+      mutation.target instanceof Element &&
+      mutation.target.closest(
+        ".pdf-export-native-file-name-title, .pdf-export-native-page-break",
+      )
+    ) {
+      return true;
+    }
+
+    const changedNodes = [
+      ...Array.from(mutation.addedNodes),
+      ...Array.from(mutation.removedNodes),
+    ];
+
+    return (
+      changedNodes.length > 0 &&
+      changedNodes.every((node) => this.isGeneratedNode(node))
+    );
+  }
+
+  private isGeneratedNode(node: Node): boolean {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+
+    return (
+      node.classList.contains("pdf-export-native-file-name-title") ||
+      node.classList.contains("pdf-export-native-page-break")
+    );
+  }
+
   private handleBeforePrint = () => {
+    if (this.cleanupTimeout !== null) {
+      window.clearTimeout(this.cleanupTimeout);
+      this.cleanupTimeout = null;
+    }
+
     this.prepareAllPrintRoots();
     this.applyNativePrintStyle();
   };
 
   private handleAfterPrint = () => {
-    window.setTimeout(() => {
+    if (this.cleanupTimeout !== null) {
+      window.clearTimeout(this.cleanupTimeout);
+    }
+
+    this.cleanupTimeout = window.setTimeout(() => {
       this.cleanup();
+      this.cleanupTimeout = null;
     }, 300);
   };
 
@@ -80,6 +126,8 @@ export class NativePdfExport {
     for (const root of roots) {
       this.preparePrintRoot(root);
     }
+
+    this.applyNativePrintStyle();
   }
 
   private preparePrintRoot(root: HTMLElement) {
@@ -93,13 +141,10 @@ export class NativePdfExport {
 
     const settings = this.getSettings();
     const nativeSettings = this.getNativeSettings();
-
     const saveStyle = (element: HTMLElement) => this.saveOriginalStyle(element);
 
     applyPrintLineSpacing(view, settings, saveStyle);
-
     applyPrintPageBreaks(view, settings, saveStyle, this.insertedPageBreaks);
-
     applyPrintMonochrome(view, settings, saveStyle);
 
     if (nativeSettings) {
@@ -129,12 +174,19 @@ export class NativePdfExport {
     ) as HTMLElement | undefined;
 
     if (existingTitle) {
-      if (nativeSettings.includeFileName) {
-        return;
-      }
-
       this.saveOriginalStyle(existingTitle);
-      existingTitle.style.setProperty("display", "none", "important");
+
+      existingTitle.style.setProperty(
+        "display",
+        nativeSettings.includeFileName ? "block" : "none",
+        "important",
+      );
+
+      if (
+        existingTitle.classList.contains("pdf-export-native-file-name-title")
+      ) {
+        this.insertedFileNameTitles.add(existingTitle);
+      }
 
       return;
     }
@@ -144,12 +196,10 @@ export class NativePdfExport {
     }
 
     const title = document.createElement("h1");
-
     title.className = "pdf-export-native-file-name-title";
     title.textContent = fileName;
 
     section.prepend(title);
-
     this.insertedFileNameTitles.add(title);
   }
 
@@ -173,7 +223,7 @@ export class NativePdfExport {
   }
 
   .pdf-export-native-file-name-title {
-    display: block !important;
+    display: ${nativeSettings.includeFileName ? "block" : "none"} !important;
   }
 }
 `;
@@ -187,7 +237,7 @@ export class NativePdfExport {
     this.exportStyleSnapshot.set(element, element.getAttribute("style"));
   }
 
-  private cleanup() {
+  private cleanup(removePrintStyle = false) {
     for (const breakElement of this.insertedPageBreaks) {
       breakElement.remove();
     }
@@ -214,7 +264,9 @@ export class NativePdfExport {
 
     this.exportStyleSnapshot.clear();
 
-    this.nativePrintStyle?.remove();
-    this.nativePrintStyle = null;
+    if (removePrintStyle) {
+      this.nativePrintStyle?.remove();
+      this.nativePrintStyle = null;
+    }
   }
 }

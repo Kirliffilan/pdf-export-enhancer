@@ -1,13 +1,15 @@
 import { setIcon } from "obsidian";
 import type { NativePdfSettings } from "../pdf-settings";
 
+type NativeSettingChanges = Partial<
+  Pick<NativePdfSettings, "includeFileName" | "landscape">
+>;
+
 export function createNativeSettingsControls(
   container: HTMLElement,
   modal: Element,
   settings: NativePdfSettings,
-  onChange: (
-    changes: Partial<Pick<NativePdfSettings, "includeFileName" | "landscape">>,
-  ) => void,
+  onChange: (changes: NativeSettingChanges) => void,
 ) {
   const checkboxes = Array.from(
     modal.querySelectorAll('.setting-item input[type="checkbox"]'),
@@ -16,63 +18,81 @@ export function createNativeSettingsControls(
   const fileNameCheckbox = checkboxes[0] ?? null;
   const landscapeCheckbox = checkboxes[1] ?? null;
 
+  setNativeCheckboxState(fileNameCheckbox, settings.includeFileName);
+  setNativeCheckboxState(landscapeCheckbox, settings.landscape);
+
   const wrapper = document.createElement("div");
   wrapper.className = "pdf-export-native-icon-controls";
 
   const fileButton = createIconButton(
     "Имя файла в заголовке",
     "info",
-    fileNameCheckbox?.checked ?? settings.includeFileName,
+    settings.includeFileName,
     false,
-    () => {
-      if (!fileNameCheckbox) {
-        return;
-      }
-
-      fileNameCheckbox.click();
-
-      const value = fileNameCheckbox.checked;
-
-      settings.includeFileName = value;
-
-      updateButtonState(fileButton, value, false);
-
-      onChange({
-        includeFileName: value,
-      });
-    },
   );
 
   const landscapeButton = createIconButton(
     "Альбомная ориентация",
     "file",
-    landscapeCheckbox?.checked ?? settings.landscape,
+    settings.landscape,
     true,
-    () => {
-      if (!landscapeCheckbox) {
-        return;
-      }
-
-      landscapeCheckbox.click();
-
-      const value = landscapeCheckbox.checked;
-
-      settings.landscape = value;
-
-      updateButtonState(landscapeButton, value, true);
-
-      onChange({
-        landscape: value,
-      });
-    },
   );
+
+  const syncState = () => {
+    if (fileNameCheckbox) {
+      settings.includeFileName = fileNameCheckbox.checked;
+    }
+
+    if (landscapeCheckbox) {
+      settings.landscape = landscapeCheckbox.checked;
+    }
+
+    updateButtonState(fileButton, settings.includeFileName, false);
+    updateButtonState(landscapeButton, settings.landscape, true);
+
+    onChange({
+      includeFileName: settings.includeFileName,
+      landscape: settings.landscape,
+    });
+  };
+
+  fileButton.disabled = !fileNameCheckbox;
+  landscapeButton.disabled = !landscapeCheckbox;
+
+  fileNameCheckbox?.addEventListener("change", syncState);
+  landscapeCheckbox?.addEventListener("change", syncState);
+
+  fileButton.addEventListener("click", () => {
+    fileNameCheckbox?.click();
+  });
+
+  landscapeButton.addEventListener("click", () => {
+    landscapeCheckbox?.click();
+  });
 
   wrapper.appendChild(fileButton);
   wrapper.appendChild(landscapeButton);
-
   container.appendChild(wrapper);
 
+  syncState();
   ensureNativeIconStyles();
+}
+
+function setNativeCheckboxState(
+  checkbox: HTMLInputElement | null,
+  value: boolean,
+) {
+  if (!checkbox || checkbox.checked === value) {
+    return;
+  }
+
+  checkbox.click();
+
+  if (checkbox.checked !== value) {
+    checkbox.checked = value;
+    checkbox.dispatchEvent(new Event("input", { bubbles: true }));
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 }
 
 function createIconButton(
@@ -80,17 +100,13 @@ function createIconButton(
   iconName: string,
   active: boolean,
   rotates: boolean,
-  onClick: () => void,
 ): HTMLButtonElement {
   const button = document.createElement("button");
 
   button.type = "button";
   button.className = "pdf-export-native-icon-button";
-
   button.setAttribute("aria-label", label);
-
   button.setAttribute("title", label);
-
   button.setAttribute("aria-pressed", String(active));
 
   if (active) {
@@ -102,9 +118,6 @@ function createIconButton(
   }
 
   setIcon(button, iconName);
-
-  button.addEventListener("click", onClick);
-
   return button;
 }
 
@@ -114,7 +127,6 @@ function updateButtonState(
   rotates: boolean,
 ) {
   button.classList.toggle("is-active", active);
-
   button.setAttribute("aria-pressed", String(active));
 
   if (rotates) {
@@ -128,9 +140,7 @@ function ensureNativeIconStyles() {
   }
 
   const style = document.createElement("style");
-
   style.id = "pdf-export-native-icon-styles";
-
   style.textContent = `
 .pdf-export-native-icon-controls {
   display: flex;
@@ -140,7 +150,6 @@ function ensureNativeIconStyles() {
   width: 100%;
   padding: 14px 0 4px;
 }
-
 .pdf-export-native-icon-button {
   position: relative;
   display: inline-flex;
@@ -162,16 +171,13 @@ function ensureNativeIconStyles() {
     border-color 160ms ease,
     transform 160ms ease;
 }
-
 .pdf-export-native-icon-button:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
-
 .pdf-export-native-icon-button:active {
   transform: scale(0.94);
 }
-
 .pdf-export-native-icon-button.is-active {
   color: var(--text-accent);
   border-color: var(--interactive-accent);
@@ -181,7 +187,6 @@ function ensureNativeIconStyles() {
     var(--background-secondary)
   );
 }
-
 .pdf-export-native-icon-button.is-active:hover {
   color: var(--text-accent);
   background: color-mix(
@@ -190,16 +195,17 @@ function ensureNativeIconStyles() {
     var(--background-secondary)
   );
 }
-
+.pdf-export-native-icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .pdf-export-native-icon-button svg {
   width: 22px;
   height: 22px;
   display: block;
   stroke-width: 1.8px;
-  transition:
-    transform 280ms cubic-bezier(.2,.8,.2,1);
+  transition: transform 280ms cubic-bezier(.2,.8,.2,1);
 }
-
 .pdf-export-native-icon-button.is-landscape svg {
   transform: rotate(-90deg);
 }
